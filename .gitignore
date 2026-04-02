@@ -1,0 +1,45 @@
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Credentials (service accounts, API keys)
+credentials/
+auth0-credentials.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (for Auth0 Actions development)
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Docs (contains ACS URLs, resource ARNs, and other sensitive identifiers)
+docs/
+
+# User data files with passwords
+scripts/auth0/novatech_users.json
+scripts/auth0/novatech_users_summary.csv
+scripts/gws/gws_provision_subset.json
