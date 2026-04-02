@@ -21,6 +21,9 @@ venv/
 *.tfvars
 !*.tfvars.example
 
+# Claude Code
+.claude/
+
 # IDE
 .vscode/
 .idea/
