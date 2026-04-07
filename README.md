@@ -1,255 +1,185 @@
 # IT Operations Sandbox
 
-A hands-on lab environment that replicates real-world IT administration workflows for a mock 100-person SaaS startup ("NovaTech Solutions"). Built for interview preparation as a Senior IT / Enterprise SaaS Platform Engineer.
+An enterprise SaaS platform engineering lab built around a mock 100-person company ("NovaTech Solutions"). Demonstrates identity federation, cross-platform provisioning, security policy automation, and drift detection across Auth0, Google Workspace, Slack, and AWS — all driven by Python against SaaS APIs.
 
-## What This Project Does
+## Why This Project Exists
 
-Uses **Auth0** (free tier, part of the Okta ecosystem) as the identity platform, **Google Cloud Identity Free** for collaboration, **Slack Developer Sandbox** for communications, **AWS Free Tier** for cloud infrastructure, and **Claude Code with MCP** for AI-powered IT operations to simulate:
+Modern IT engineering means going beyond admin consoles. This project replicates the systems and workflows of an Enterprise SaaS Platform Engineer: tenant-wide architecture for collaboration platforms, SSO/SCIM from the application side, per-OU security policies, and platform configuration as code.
 
-- **Identity & Access Management** — SAML/OIDC federation, RBAC, SCIM-like provisioning
-- **User Lifecycle Automation** — Joiner/Mover/Leaver workflows via Auth0 Actions and Management API
-- **SaaS Platform Engineering** — Google Workspace tenant architecture, Slack workspace governance, third-party app management
-- **AWS IAM Architecture** — Least-privilege roles, Terraform IaC, CI/CD pipelines
-- **AI-Powered IT Ops** — Log analysis, ticket triage, drift detection via Claude MCP
+Every script in this repo solves a problem that couldn't be solved by clicking through a console.
+
+## What's Built
+
+### Identity Federation (Auth0 → AWS + Google Workspace)
+
+Auth0 serves as the SAML 2.0 Identity Provider, federating into both AWS IAM Identity Center and Google Cloud Identity. Post-login Actions dynamically inject department-based SAML attributes into assertions — the same pattern used for attribute-based access control in Okta.
+
+```
+Auth0 (IdP)
+├── SAML 2.0 → AWS IAM Identity Center
+│   └── Post-login Action maps department → Permission Set (Admin/PowerUser/ReadOnly)
+└── SAML 2.0 → Google Cloud Identity
+    └── Per-profile SSO with unique Entity ID + ACS URL per SAML profile
+```
+
+- **Auth0 → AWS**: Department-based Permission Set assignment via SAML attributes
+- **Auth0 → GWS**: Per-profile SAML federation with all 10 department OUs assigned SSO profiles
+- **SAML troubleshooting**: Diagnosed and resolved audience mismatches on both AWS and GWS federations by inspecting IdP-side logs and assertion formats
+
+### Google Workspace Tenant Architecture
+
+Built a full OU structure mirroring NovaTech's 10 departments in Google Cloud Identity Free, with per-OU security policies and Python automation via the Admin SDK.
+
+- **10 department OUs** — 2 created manually (console familiarity), 8 via Python Directory API (automation at scale)
+- **Per-OU 2-Step Verification** — Enforced for IT-Ops, Executive, Finance, HR (sensitive access); allowed for others
+- **User provisioning** — Python script creates users in correct OUs via Directory API with department metadata, manager relationships, and cost center attributes
+- **Cloud Identity Policy API** — Explored v1beta1 write operations, systematically tested and documented API limitations on the Free edition, repurposed scripts as policy audit tools
+
+### Cross-Platform Drift Detection
+
+A sync engine that uses Auth0 as the source of truth and detects drift across Google Workspace.
+
+```bash
+python scripts/lifecycle/sync_auth0_gws.py --admin-email admin@domain.com --report
+```
+
+Detects four categories of drift:
+- **OU mismatches** — user in wrong OU based on Auth0 department (auto-remediates)
+- **Missing from GWS** — Auth0 user not provisioned in GWS
+- **Orphaned in GWS** — GWS user not in Auth0 directory
+- **Unknown department** — Auth0 department doesn't map to any OU
+
+Generates markdown drift reports for compliance documentation.
+
+### User Lifecycle Automation
+
+Python scripts for the full Joiner/Mover/Leaver lifecycle across Auth0 and Google Workspace:
+
+- **Joiner**: Provision user in Auth0 with department metadata → assign RBAC role → create in GWS in correct OU → SAML SSO ready
+- **Mover**: Update department in Auth0 → sync script detects drift → moves user to correct GWS OU → role reassignment
+- **Leaver**: Block Auth0 account → revoke tokens → remove roles → suspend GWS account
+
+### Email Domain Migration
+
+Migrated 100 Auth0 users from one domain to another via the Management API — updating emails, `user_metadata.manager_email` references, and downstream AWS Identity Store users. Demonstrates the identity reconciliation work involved in tenant consolidation.
 
 ## Architecture
 
 ```
                     ┌──────────────────────────┐
-                    │      Auth0 Tenant        │
-                    │      (SAML 2.0 IdP)      │
-                    └────────────┬─────────────┘
+                    │      Auth0 Tenant         │
+                    │    (SAML 2.0 IdP, RBAC)   │
+                    │    100 users, 10 roles     │
+                    └────────────┬──────────────┘
                                  │
-                    Post-Login Action injects
-                    SAML attributes (department,
-                    AccessLevel, RoleSessionName)
+              Post-Login Actions inject SAML
+              attributes per Service Provider
                                  │
-       ┌─────────────┬──────────┼──────────┬──────────────┐
-       │             │          │          │              │
-  ┌────▼─────┐ ┌─────▼────┐ ┌──▼───┐ ┌───▼────┐ ┌───────▼───────┐
-  │ AWS IAM  │ │  Google  │ │Slack │ │ SaaS   │ │ Auth0 Actions │
-  │ Identity │ │  Cloud   │ │Enter-│ │ Apps   │ │ (JML, SAML    │
-  │ Center   │ │ Identity │ │prise │ │ (Jira, │ │  Attribute    │
-  │          │ │ (GWS)    │ │      │ │ GitHub)│ │  Mapping)     │
-  │ Perm Sets│ └──────────┘ └──────┘ └────────┘ └───────┬───────┘
-  │ Admin    │                                           │ Webhooks
-  │ PowerUser│                                    ┌──────▼──────┐
-  │ ReadOnly │                                    │ AWS Lambda  │
-  └──────────┘                                    │ + DynamoDB  │
-                                                  │ (Audit Log) │
-                                                  └─────────────┘
-
-     Claude Code ◄──── Auth0 MCP Server ────► Auth0 Management API
+         ┌───────────────────────┼───────────────────────┐
+         │                       │                       │
+    ┌────▼──────┐      ┌────────▼────────┐     ┌────────▼────────┐
+    │ AWS IAM   │      │ Google Cloud    │     │ Slack Developer │
+    │ Identity  │      │ Identity Free   │     │ Sandbox         │
+    │ Center    │      │                 │     │                 │
+    │           │      │ 10 dept OUs     │     │ Admin API       │
+    │ 3 Perm    │      │ Per-OU 2SV      │     │ SCIM            │
+    │ Sets      │      │ SSO profiles    │     │ Channel gov.    │
+    └───────────┘      └────────┬────────┘     └─────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │  Python Automation    │
+                    │  Admin SDK + Auth0 API │
+                    │  Drift detection      │
+                    │  Policy auditing      │
+                    └──────────────────────┘
 ```
 
 ## Mock Company: NovaTech Solutions
 
-100 employees across 10 departments with realistic role-based access:
+100 employees across 10 departments with role-based access:
 
-| Department | Headcount | Auth0 Role | AWS Permission Set |
-|-----------|-----------|-----------|-------------------|
-| Engineering | 30 | `engineer` | PowerUser |
-| Sales | 15 | `sales` | ReadOnly |
-| Data | 10 | `data-engineer` | PowerUser |
-| Marketing | 10 | `marketing` | ReadOnly |
-| Product | 8 | `product` | ReadOnly |
-| Executive | 7 | `executive` | ReadOnly |
-| IT-Ops | 5 | `it-admin` | Admin |
-| Finance | 5 | `finance` | ReadOnly |
-| Design | 5 | `designer` | ReadOnly |
-| HR | 5 | `hr` | ReadOnly |
+| Department | Headcount | Auth0 Role | AWS Permission Set | GWS 2SV Policy |
+|-----------|-----------|-----------|-------------------|----------------|
+| Engineering | 30 | `engineer` | PowerUser | Allow |
+| Sales | 15 | `sales` | ReadOnly | Allow |
+| Data | 10 | `data-engineer` | PowerUser | Allow |
+| Marketing | 10 | `marketing` | ReadOnly | Allow |
+| Product | 8 | `product` | ReadOnly | Allow |
+| Executive | 7 | `executive` | ReadOnly | **Enforce** |
+| IT-Ops | 5 | `it-admin` | Admin | **Enforce** |
+| Finance | 5 | `finance` | ReadOnly | **Enforce** |
+| Design | 5 | `designer` | ReadOnly | Allow |
+| HR | 5 | `hr` | ReadOnly | **Enforce** |
 
-## Getting Started
+User metadata: `{ department, role_title, cost_center, manager_email, start_date }`
 
-### Prerequisites
+## Key Scripts
 
-- Python 3.10+
-- Node.js 18+ (for MCP servers)
-- [Claude Code](https://claude.ai/code) with Claude Pro subscription
-- Auth0 developer account (free at auth0.com)
-- AWS Free Tier account
-- Google Cloud Identity Free account (optional, for Phase 2+)
-- Slack Developer Program sandbox (optional, for Phase 3+)
+| Script | What It Does |
+|--------|-------------|
+| `scripts/auth0/provision_users.py` | Bulk-provision users into Auth0 with department metadata and RBAC roles |
+| `scripts/auth0/update_user_emails.py` | Migrate user email domains across Auth0 (batch Management API updates) |
+| `scripts/auth0/actions/aws-saml-attribute-mapping.js` | Post-login Action: maps department → AWS Permission Set via SAML attributes |
+| `scripts/auth0/actions/gws-saml-attribute-mapping.js` | Post-login Action: injects department metadata into GWS SAML assertions |
+| `scripts/gws/create_ous.py` | Create department OUs in Google Cloud Identity via Directory API |
+| `scripts/gws/provision_users.py` | Provision users into correct GWS OUs with org metadata |
+| `scripts/gws/configure_2sv.py` | Audit per-OU 2-Step Verification policies via Cloud Identity Policy API |
+| `scripts/lifecycle/sync_auth0_gws.py` | Cross-platform drift detection: Auth0 departments vs. GWS OU placement |
 
-### 1. Clone and Install
+All scripts support `--dry-run` for safe change management and are idempotent (safe to re-run).
 
-```bash
-cd "IT Operations Sandbox"
-cp .env.example .env
-pip install -r requirements.txt
-```
+## Technical Decisions & Tradeoffs
 
-### 2. Set Up Auth0
+**Why Auth0 instead of Okta?** Auth0 is part of the Okta ecosystem (acquired 2021) and shares the same identity concepts. The free developer tier requires no business domain. Auth0 Actions give code-level control over automation logic (Node.js) vs. Okta's visual Workflow builder — demonstrating protocol-level understanding rather than vendor-specific UI familiarity.
 
-1. Create a free developer tenant at [auth0.com](https://auth0.com)
-2. Create a **Machine-to-Machine Application** (Dashboard > Applications > Create)
-3. Authorize it for the **Auth0 Management API** with all scopes (sandbox use)
-4. Fill in your `.env`:
-   ```
-   AUTH0_DOMAIN=your-tenant.us.auth0.com
-   AUTH0_CLIENT_ID=your_m2m_client_id
-   AUTH0_CLIENT_SECRET=your_m2m_client_secret
-   ```
+**Why Google Cloud Identity Free?** Full Admin Console, Directory API, and OU management without a paid Workspace license. The Cloud Identity Policy API is read-only on the Free edition (v1beta1 `create` returns 500, `patch` returns 400) — discovered through systematic API testing, documented, and worked around by using the Admin Console for writes and the API for audit/drift detection.
 
-### 3. Set Up AWS
-
-1. Create a dedicated AWS account (separate from personal/production)
-2. Create an IAM admin user with `AdministratorAccess` and generate an access key
-3. Configure the CLI profile (credentials stored in `~/.aws/credentials`, never in `.env`):
-   ```bash
-   aws configure --profile novatech-sandbox
-   ```
-4. Add to `.env`:
-   ```
-   AWS_PROFILE=novatech-sandbox
-   AWS_REGION=your_aws_region
-   AWS_ACCOUNT_ID=your_account_id
-   ```
-5. Enable AWS Organizations and IAM Identity Center (console step)
-
-### 4. Configure SAML Federation (Auth0 > AWS)
-
-1. In **AWS IAM Identity Center** > Settings > Change identity source > **External identity provider**
-2. Copy the **ACS URL** and **Issuer URL** from AWS
-3. In **Auth0 Dashboard** > Applications > Create > Regular Web App > enable SAML2 addon:
-   - Callback URL: paste ACS URL from AWS
-   - Audience: paste Issuer URL from AWS
-   - NameID Format: `urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress` (must be emailAddress, not persistent)
-4. Download Auth0's IdP Metadata XML and upload to AWS IAM Identity Center
-5. Add the SAML app's client ID to `.env`:
-   ```
-   AUTH0_SAML_CLIENT_ID=your_saml_app_client_id
-   ```
-
-### 5. Configure MCP
-
-The project includes a pre-configured `.mcp.json` for Auth0 and filesystem MCP servers. Restart Claude Code to connect.
-
-### 6. Generate and Provision Users
-
-```bash
-# Generate the 100-user dataset
-python scripts/auth0/generate_users.py
-
-# Preview without creating
-python scripts/auth0/provision_users.py --dry-run
-
-# Provision all 100 users into Auth0
-python scripts/auth0/provision_users.py
-```
-
-## AWS Federation
-
-Auth0 is federated to AWS IAM Identity Center via SAML 2.0. A post-login Auth0 Action maps user departments to SAML attributes, which AWS uses to assign Permission Sets.
-
-### Permission Set Mapping
-
-| Department | Permission Set | AWS Managed Policy |
-|---|---|---|
-| IT-Ops | Admin | `AdministratorAccess` |
-| Engineering, Data | PowerUser | `PowerUserAccess` |
-| Finance, Executive, Product, Design, HR, Sales, Marketing | ReadOnly | `ReadOnlyAccess` |
-
-### How It Works
-
-1. User navigates to the AWS SSO portal (SP-initiated login)
-2. AWS redirects to Auth0 for authentication
-3. Auth0 authenticates the user, then the **post-login Action** reads `user_metadata.department` and injects SAML attributes:
-   - `RoleSessionName` — user's email
-   - `AccessLevel` — mapped Permission Set (Admin/PowerUser/ReadOnly)
-   - `SessionDuration` — 8 hours
-4. Auth0 sends the SAML assertion to AWS's ACS endpoint
-5. AWS matches the NameID (email) to the Identity Store user and grants the assigned Permission Set
-
-### Key Files
-
-- [aws-saml-attribute-mapping.js](scripts/auth0/actions/aws-saml-attribute-mapping.js) — Post-login Action source code
+**Why Python against SaaS APIs?** Every automation in this project calls APIs directly — Auth0 Management API, Google Admin SDK Directory API, Cloud Identity Policy API, AWS CLI. No GUI clicks recorded as "automation." Scripts are the deployment artifact.
 
 ## Project Structure
 
 ```
-.claude/
-  agents/                          # Custom Claude Code agents
-    identity-lifecycle-manager.md  #   Joiner/Mover/Leaver operations
-    iam-policy-auditor.md          #   Auth0 + AWS security audits
-    auth0-log-analyst.md           #   Security log analysis
-    infrastructure-auditor.md      #   Terraform/AWS review
-  commands/                        # Slash commands
-    gsd.md                         #   /gsd — planning workflow
-    ralf.md                        #   /ralf — execution workflow
-    verify.md                      #   /verify — run all sandbox gates
-    ship.md                        #   /ship — commit + PR creation
-    help.md                        #   /help — command reference
-  skills/                          # Claude Code skills
-    onboard-user.md                #   /onboard-user <first> <last> <dept>
-    offboard-user.md               #   /offboard-user <email>
-    transfer-user.md               #   /transfer-user <email> <new_dept>
-    access-review.md               #   /access-review [department]
-    bulk-provision.md              #   /bulk-provision [count]
-    session-report.md              #   /session-report [today|week|all]
-  hooks/                           # Automated activity logging
 scripts/
-  auth0/
-    generate_users.py              # Generate 100 mock NovaTech users
-    provision_users.py             # Push users to Auth0 via Management API
-    actions/
-      aws-saml-attribute-mapping.js  # SAML attribute mapping Action (post-login)
-  gws/                             # Google Workspace automation
-    create_ous.py                  # Create OU structure in Cloud Identity
-  aws/                             # AWS automation
-  lifecycle/                       # JML automation
+  auth0/                           # Auth0 Management API automation
+    generate_users.py              #   Generate 100 mock NovaTech users
+    provision_users.py             #   Bulk-provision users with roles + metadata
+    update_user_emails.py          #   Domain migration via Management API
+    actions/                       #   Auth0 post-login Actions (Node.js)
+      aws-saml-attribute-mapping.js
+      gws-saml-attribute-mapping.js
+  gws/                             # Google Workspace Admin SDK automation
+    create_ous.py                  #   OU creation via Directory API
+    provision_users.py             #   User provisioning into OUs
+    configure_2sv.py               #   2SV policy audit via Cloud Identity API
+  lifecycle/                       # Cross-platform identity automation
+    sync_auth0_gws.py             #   Auth0 → GWS drift detection + remediation
 terraform/
-  auth0/                           # Auth0 tenant-as-code
-  aws/                             # AWS infrastructure
-docs/                              # Architecture diagrams, reports (gitignored)
-logs/                              # Auto-generated activity logs (gitignored)
+  auth0/                           # Auth0 tenant-as-code (planned)
+  aws/                             # AWS infrastructure (planned)
 ```
 
-## Claude Code Skills
+## Roadmap
 
-| Skill | Usage | Description |
-|-------|-------|-------------|
-| `/onboard-user` | `/onboard-user Jane Doe Engineering` | Create user, assign roles, set metadata |
-| `/offboard-user` | `/offboard-user jane.doe@company.com` | Revoke tokens, block account, remove roles |
-| `/transfer-user` | `/transfer-user jane.doe@company.com Product` | Update department, reassign roles |
-| `/access-review` | `/access-review Finance` | Audit users, flag anomalies, compliance report |
-| `/bulk-provision` | `/bulk-provision 25` | Batch-create users from dataset |
-| `/session-report` | `/session-report today` | Generate interview-ready activity report |
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1. Foundation & Platform Setup | Auth0 tenant, RBAC, SAML federation (AWS + GWS), MFA | Complete |
+| 2. Google Workspace Architecture | Per-OU policies, data governance, third-party app governance, config-as-code | In Progress |
+| 3. Slack Platform Engineering | SCIM provisioning, channel governance, app management via Admin API | Planned |
+| 4. Cross-Platform Identity | Unified SCIM pipeline, access reviews, drift detection across all platforms | Planned |
+| 5. Config-as-Code & AI Ops | Tenant config CI/CD, Claude MCP integrations, escalation runbooks | Planned |
 
-## Claude Code Agents
+## Identity Protocol Reference
 
-| Agent | Purpose |
-|-------|---------|
-| `identity-lifecycle-manager` | Full JML lifecycle — onboarding, transfers, offboarding, access reviews |
-| `iam-policy-auditor` | Security audits across Auth0 RBAC and AWS IAM, compliance reporting |
-| `auth0-log-analyst` | Analyze Auth0 tenant logs for anomalies, generate incident reports |
-| `infrastructure-auditor` | Review Terraform configs, audit AWS resources, check free tier usage |
-
-## Claude Code Commands
-
-| Command | Description |
-|---------|-------------|
-| `/gsd` | Planning workflow — audit, acceptance criteria, plan, tasks, approval |
-| `/ralf` | Execution loop — implement, verify, review, learn, complete |
-| `/verify` | Run all sandbox verification gates (Auth0, AWS, GWS, Slack) |
-| `/ship` | Final verification, commit, and PR creation |
-| `/help` | Show all available commands with project context |
-
-## 10-Week Roadmap
-
-| Phase | Weeks | Focus | Status |
-|-------|-------|-------|--------|
-| 1. Foundation & Platform Setup | 1-2 | Auth0 tenant, RBAC, SAML federation, GWS + Slack setup, MFA | In Progress |
-| 2. Google Workspace Architecture | 3-4 | OU design, Directory API automation, data governance, app governance | Not started |
-| 3. Slack Platform Engineering | 5-6 | SCIM provisioning, channel governance, app management, Enterprise admin | Not started |
-| 4. Identity Lifecycle Automation | 7-8 | Cross-platform JML workflows, Auth0 Actions + Lambda + webhooks | Not started |
-| 5. AI-Powered IT Ops & Portfolio | 9-10 | Claude MCP integrations, log analysis, config-as-code, interview demos | Not started |
-
-See [it_ops_lab.md](it_ops_lab.md) for the full detailed plan.
-
-## Why Auth0?
-
-Auth0 is part of the **Okta ecosystem** (acquired 2021) and shares the same identity concepts — SSO, SAML, OIDC, RBAC, lifecycle automation. The free developer tier requires only a personal email. All skills transfer directly to Okta interview conversations, and fluency in both platforms demonstrates deeper understanding.
+| Concept | Auth0 (This Project) | Okta Equivalent |
+|---------|---------------------|-----------------|
+| User Store | `user_metadata` + `app_metadata` | Universal Directory |
+| Automation | Actions (Node.js serverless) | Workflows (visual builder) |
+| Provisioning | Management API + webhooks | SCIM to connected apps |
+| SSO Federation | SAML/OIDC connections | SAML/OIDC app integrations |
+| MFA | Guardian, adaptive MFA | Okta Verify, FastPass |
+| Groups/Roles | Roles + Permissions + Organizations | Groups + Group Rules |
+| Logs/Audit | Logs + Log Streams | System Log + Event Hooks |
+| IaC | Terraform Provider | Terraform Provider |
 
 ## License
 

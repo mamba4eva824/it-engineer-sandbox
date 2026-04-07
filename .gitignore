@@ -42,6 +42,9 @@ logs/
 # Docs (contains ACS URLs, resource ARNs, and other sensitive identifiers)
 docs/
 
+# Drafts
+docs/drafts/
+
 # User data files with passwords
 scripts/auth0/novatech_users.json
 scripts/auth0/novatech_users_summary.csv
