@@ -10,9 +10,11 @@ Every script in this repo solves a problem that couldn't be solved by clicking t
 
 ## What's Built
 
+> Detailed write-ups for each area: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md)
+
 ### Identity Federation (Auth0 → AWS + Google Workspace)
 
-Auth0 serves as the SAML 2.0 Identity Provider, federating into both AWS IAM Identity Center and Google Cloud Identity. Post-login Actions dynamically inject department-based SAML attributes into assertions — the same pattern used for attribute-based access control in Okta.
+Auth0 serves as the SAML 2.0 Identity Provider, federating into both AWS IAM Identity Center and Google Cloud Identity. Post-login Actions dynamically inject department-based SAML attributes into assertions — the same pattern used for attribute-based access control in Okta. ([details](public-docs/02-aws-saml-federation.md))
 
 ```
 Auth0 (IdP)
@@ -24,20 +26,22 @@ Auth0 (IdP)
 
 - **Auth0 → AWS**: Department-based Permission Set assignment via SAML attributes
 - **Auth0 → GWS**: Per-profile SAML federation with all 10 department OUs assigned SSO profiles
-- **SAML troubleshooting**: Diagnosed and resolved audience mismatches on both AWS and GWS federations by inspecting IdP-side logs and assertion formats
+- **SAML troubleshooting**: Diagnosed and resolved audience mismatches on both AWS and GWS federations by inspecting IdP-side logs and assertion formats ([troubleshooting details](public-docs/02-aws-saml-federation.md#troubleshooting))
 
 ### Google Workspace Tenant Architecture
 
-Built a full OU structure mirroring NovaTech's 10 departments in Google Cloud Identity Free, with per-OU security policies and Python automation via the Admin SDK.
+Built a full OU structure mirroring NovaTech's 10 departments in Google Cloud Identity Free, with per-OU security policies and Python automation via the Admin SDK. ([full details](public-docs/03-gws-federation-and-administration.md))
 
 - **10 department OUs** — 2 created manually (console familiarity), 8 via Python Directory API (automation at scale)
 - **Per-OU 2-Step Verification** — Enforced for IT-Ops, Executive, Finance, HR (sensitive access); allowed for others
+- **Per-OU third-party app governance** — Blocked for Finance, HR, Executive; inherited (allow) for others
 - **User provisioning** — Python script creates users in correct OUs via Directory API with department metadata, manager relationships, and cost center attributes
+- **Security policy audit** — Python tool reads Cloud Identity Policy API and verifies all per-OU policies match desired state (20 checks, 0 drift)
 - **Cloud Identity Policy API** — Explored v1beta1 write operations, systematically tested and documented API limitations on the Free edition, repurposed scripts as policy audit tools
 
 ### Cross-Platform Drift Detection
 
-A sync engine that uses Auth0 as the source of truth and detects drift across Google Workspace.
+A sync engine that uses Auth0 as the source of truth and detects drift across Google Workspace. ([architecture details](public-docs/03-gws-federation-and-administration.md#cross-platform-drift-detection))
 
 ```bash
 python scripts/lifecycle/sync_auth0_gws.py --admin-email admin@domain.com --report
@@ -53,7 +57,7 @@ Generates markdown drift reports for compliance documentation.
 
 ### User Lifecycle Automation
 
-Python scripts for the full Joiner/Mover/Leaver lifecycle across Auth0 and Google Workspace:
+Python scripts for the full Joiner/Mover/Leaver lifecycle across Auth0 and Google Workspace: ([Auth0 provisioning details](public-docs/01-auth0-identity-platform.md))
 
 - **Joiner**: Provision user in Auth0 with department metadata → assign RBAC role → create in GWS in correct OU → SAML SSO ready
 - **Mover**: Update department in Auth0 → sync script detects drift → moves user to correct GWS OU → role reassignment
@@ -61,7 +65,7 @@ Python scripts for the full Joiner/Mover/Leaver lifecycle across Auth0 and Googl
 
 ### Email Domain Migration
 
-Migrated 100 Auth0 users from one domain to another via the Management API — updating emails, `user_metadata.manager_email` references, and downstream AWS Identity Store users. Demonstrates the identity reconciliation work involved in tenant consolidation.
+Migrated 100 Auth0 users from one domain to another via the Management API — updating emails, `user_metadata.manager_email` references, and downstream AWS Identity Store users. Demonstrates the identity reconciliation work involved in tenant consolidation. ([script details](public-docs/01-auth0-identity-platform.md#email-domain-migration))
 
 ## Architecture
 
@@ -158,12 +162,22 @@ terraform/
   aws/                             # AWS infrastructure (planned)
 ```
 
+## Documentation
+
+Detailed write-ups covering architecture, troubleshooting, and technical decisions:
+
+| Document | Covers |
+|----------|--------|
+| [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | Tenant setup, 100-user provisioning, RBAC architecture, email domain migration, Auth0 Actions, Okta concept mapping |
+| [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | SAML 2.0 architecture, Permission Sets, attribute mapping, troubleshooting (audience + NameID mismatches), debugging methodology |
+| [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | Cloud Identity setup, OU architecture, SAML federation, per-OU 2SV + app governance, drift detection, policy audit, API limitation discovery |
+
 ## Roadmap
 
 | Phase | Focus | Status |
 |-------|-------|--------|
 | 1. Foundation & Platform Setup | Auth0 tenant, RBAC, SAML federation (AWS + GWS), MFA | Complete |
-| 2. Google Workspace Architecture | Per-OU policies, data governance, third-party app governance, config-as-code | In Progress |
+| 2. Google Workspace Architecture | Per-OU policies, data governance, third-party app governance, config-as-code | Complete |
 | 3. Slack Platform Engineering | SCIM provisioning, channel governance, app management via Admin API | Planned |
 | 4. Cross-Platform Identity | Unified SCIM pipeline, access reviews, drift detection across all platforms | Planned |
 | 5. Config-as-Code & AI Ops | Tenant config CI/CD, Claude MCP integrations, escalation runbooks | Planned |
