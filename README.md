@@ -28,6 +28,14 @@ Auth0 (IdP)
 - **Auth0 → GWS**: Per-profile SAML federation with all 10 department OUs assigned SSO profiles
 - **SAML troubleshooting**: Diagnosed and resolved audience mismatches on both AWS and GWS federations by inspecting IdP-side logs and assertion formats ([troubleshooting details](public-docs/02-aws-saml-federation.md#troubleshooting))
 
+### RBAC with Resource Server
+
+Full RBAC chain: **Users → Roles → Permissions → Resource Server**. 30 permissions assigned across 10 roles following least-privilege principles. ([permission matrix](public-docs/01-auth0-identity-platform.md#resource-server--permission-to-role-assignment))
+
+- **Resource Server**: "NovaTech Internal API" with 30 scoped permissions (repos, databases, pipelines, billing, CRM, design assets, infrastructure, etc.)
+- **Least-privilege design**: No role gets `access:production` by default. `it-admin` gets `manage:*` but not `write:databases`. Sensitive reports restricted to Executive/Finance/HR.
+- **Verification**: Script queries Management API and compares actual permissions against desired matrix — 10 roles, 50 assignments, 0 drift.
+
 ### Google Workspace Tenant Architecture
 
 Built a full OU structure mirroring NovaTech's 10 departments in Google Cloud Identity Free, with per-OU security policies and Python automation via the Admin SDK. ([full details](public-docs/03-gws-federation-and-administration.md))
@@ -122,6 +130,7 @@ User metadata: `{ department, role_title, cost_center, manager_email, start_date
 | Script | What It Does |
 |--------|-------------|
 | `scripts/auth0/provision_users.py` | Bulk-provision users into Auth0 with department metadata and RBAC roles |
+| `scripts/auth0/assign_role_permissions.py` | Assign 30 permissions to 10 roles (least-privilege matrix) with `--verify` mode |
 | `scripts/auth0/update_user_emails.py` | Migrate user email domains across Auth0 (batch Management API updates) |
 | `scripts/auth0/actions/aws-saml-attribute-mapping.js` | Post-login Action: maps department → AWS Permission Set via SAML attributes |
 | `scripts/auth0/actions/gws-saml-attribute-mapping.js` | Post-login Action: injects department metadata into GWS SAML assertions |

@@ -30,6 +30,35 @@ Configured Auth0 as the centralized Identity Provider for a mock 100-person SaaS
 - Updated both `email` and `user_metadata.manager_email` references in a single batch operation
 - Demonstrates the identity reconciliation work involved in tenant consolidation (M&A scenario)
 
+### Resource Server & Permission-to-Role Assignment
+
+Created the "NovaTech Internal API" Resource Server with 30 scoped permissions and assigned them to roles following least-privilege principles. This completes the full RBAC chain: **Users → Roles → Permissions → Resource Server**.
+
+**Permission-to-Role Matrix:**
+
+| Role | Permissions | Count |
+|---|---|---|
+| `engineer` | `read:repos`, `write:repos`, `access:staging`, `access:ci-cd`, `read:databases`, `read:reports`, `read:analytics` | 7 |
+| `data-engineer` | `read:repos`, `read:databases`, `write:databases`, `access:pipelines`, `access:ml-models`, `read:analytics`, `read:reports` | 7 |
+| `it-admin` | `manage:users`, `manage:roles`, `manage:devices`, `read:logs`, `manage:infrastructure`, `read:reports`, `read:repos` | 7 |
+| `finance` | `read:billing`, `approve:expenses`, `read:reports`, `read:compensation` | 4 |
+| `executive` | `read:strategic-reports`, `approve:budgets`, `read:billing`, `read:analytics`, `read:reports` | 5 |
+| `product` | `manage:products`, `read:user-research`, `read:analytics`, `read:reports` | 4 |
+| `designer` | `manage:design-assets`, `read:design-assets`, `read:user-research`, `read:analytics` | 4 |
+| `hr` | `manage:employees`, `read:compensation`, `read:reports` | 3 |
+| `sales` | `read:crm`, `write:crm`, `read:reports`, `read:analytics` | 4 |
+| `marketing` | `manage:campaigns`, `manage:content`, `read:analytics`, `read:crm`, `read:reports` | 5 |
+
+**Design principles:**
+- No role gets `access:production` by default — requires elevated access approval
+- `it-admin` gets `manage:*` but NOT `access:production` or `write:databases` — admin access doesn't mean data write access
+- `read:reports` is broadly granted; sensitive reports (`read:strategic-reports`, `read:compensation`) are restricted to Executive and HR/Finance respectively
+- Engineering gets `write:repos` but Data doesn't — Data reads code, they don't push to it
+
+**Verification:** Built `scripts/auth0/assign_role_permissions.py` with a `--verify` flag that queries the Management API and compares actual permissions against the desired matrix. All 10 roles verified as OK with 0 drift.
+
+**Auth0 ↔ Okta mapping:** Resource Server = Okta Authorization Server. Permissions/scopes on the Resource Server = scopes on the Authorization Server. Role → Permission assignment = Group → Scope policy.
+
 ### Auth0 Actions (Post-Login)
 - **AWS SAML Attribute Mapping**: Reads `user_metadata.department`, maps to Permission Set (Admin/PowerUser/ReadOnly), injects SAML attributes into the assertion — scoped to the AWS SAML app client_id only
 - **GWS SAML Attribute Mapping**: Injects department and role_title into the Google Workspace SAML assertion — scoped to the GWS SAML app client_id only
@@ -42,6 +71,7 @@ Configured Auth0 as the centralized Identity Provider for a mock 100-person SaaS
 | `scripts/auth0/generate_users.py` | Generate 100 mock NovaTech users with realistic metadata |
 | `scripts/auth0/provision_users.py` | Bulk-provision users into Auth0 via Management API |
 | `scripts/auth0/update_user_emails.py` | Batch email domain migration via Management API |
+| `scripts/auth0/assign_role_permissions.py` | Assign 30 permissions to 10 roles (least-privilege matrix) with verify mode |
 | `scripts/auth0/actions/aws-saml-attribute-mapping.js` | Post-login Action: department → AWS Permission Set |
 | `scripts/auth0/actions/gws-saml-attribute-mapping.js` | Post-login Action: department + role into GWS assertion |
 
