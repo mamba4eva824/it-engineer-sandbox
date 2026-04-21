@@ -21,11 +21,13 @@ This project builds a series of interconnected sandbox environments that replica
 
 ### Existing Resources
 - AWS Free Tier sandbox (active)
-- Auth0 Developer tenant (active)
-- 100 NovaTech mock users provisioned with roles + metadata
-- Auth0 → AWS SAML federation (active)
-- Auth0 MCP server (connected)
-- Domain: `your-domain.com` (available for Cloud Identity verification)
+- **Okta Integrator Free tenant (active)** — primary IdP going forward; API Services app + Private Key JWT auth, MCP server connected. See `okta_workato_zendesk_slack.md` for the Okta-era JML build plan.
+- Auth0 Developer tenant (preserved as historical snapshot on `auth0_sandbox` branch; 100 NovaTech users + 10 roles + SAML federation to AWS/GWS live there)
+- Auth0 MCP server (still connected alongside Okta MCP for reference during migration)
+- Google Cloud Identity Free on `ohmgym.com` (active; SAML federation currently via Auth0, to be re-pointed to Okta in Phase 1.4)
+- Domain: `ohmgym.com` (verified for Cloud Identity)
+
+**Phase 1 note:** the original Auth0-centric Phase 1 below is retained for historical reference. The Okta migration is tracked in `okta_workato_zendesk_slack.md`; the current focus is the Okta RBAC foundation (profile attributes + department groups + group rules) via `scripts/okta/reconcile_config.py`. Phase 2-3 downstream work (GWS, Slack) resumes once Okta RBAC is stable.
 
 ### Total Timeline
 10 weeks at 1-2 hours per day, or 5 weeks at 3-4 hours per day

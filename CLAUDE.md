@@ -14,7 +14,7 @@ A 100-person SaaS startup with departments: Engineering, IT-Ops, Finance, Execut
 - **Communication**: Slack Developer Sandbox — Admin API, SCIM, channel governance, app management
 - **Cloud**: AWS Free Tier (IAM Identity Center, Lambda, DynamoDB) — deemphasized; "cloud infrastructure lives with separate teams"
 - **Config-as-Code**: Python scripts for GWS/Slack, Terraform for Auth0/AWS, GitHub Actions CI/CD
-- **MCP Servers**: Auth0, Filesystem (future: GWS, Slack)
+- **MCP Servers**: Okta (Private Key JWT), Auth0, Filesystem (future: GWS, Slack)
 
 ## Directory Structure
 ```
@@ -23,11 +23,13 @@ A 100-person SaaS startup with departments: Engineering, IT-Ops, Finance, Execut
   skills/          # Custom Claude Code skills (slash commands)
   hooks/           # Activity logging hooks
 scripts/
-  auth0/           # Auth0 Management API scripts (Python)
+  okta/            # Okta Management API scripts (Python) — RBAC config-as-code
+  auth0/           # Auth0 Management API scripts (Python, being migrated to Okta)
   gws/             # Google Workspace Admin SDK scripts (Python)
   slack/            # Slack Admin API scripts (Python)
   lifecycle/       # Cross-platform Joiner/Mover/Leaver automation
 config/
+  okta/            # Okta tenant config-as-code (profile schema, groups, rules)
   auth0/           # Auth0 tenant config-as-code
   gws/             # Google Workspace config-as-code
   slack/            # Slack workspace config-as-code
@@ -41,8 +43,11 @@ logs/              # Auto-generated activity logs (gitignored)
 
 ## Platform Credentials & MCP
 
+### Okta MCP Server
+Configured in `.mcp.json` via a wrapper script (`run-okta-mcp.sh`) that sources the project `.env` and execs `uv run okta-mcp-server`. Auth is Private Key JWT (client_credentials) against an Okta API Services app; credentials (OKTA_ORG_URL, OKTA_CLIENT_ID, OKTA_KEY_ID, OKTA_PRIVATE_KEY, OKTA_SCOPES) live in the gitignored project `.env`. Same credential is shared with `scripts/okta/*.py`. Okta is the IdP going forward; Auth0 remains on the `auth0_sandbox` branch as a preserved snapshot.
+
 ### Auth0 MCP Server
-Configured in `.mcp.json`. Credentials stored in system keychain via `auth0-mcp-server init`.
+Configured in `.mcp.json`. Credentials stored in system keychain via `auth0-mcp-server init`. Kept available during Okta migration for reference / rollback.
 
 ### Auth0 Free Tier Limits
 - 25,000 MAU — more than enough for 100 sandbox users
@@ -61,9 +66,10 @@ Configured in `.mcp.json`. Credentials stored in system keychain via `auth0-mcp-
 
 ## Key Conventions
 - All automation is **Python against SaaS APIs** — not console clicks
-- User metadata follows: `{ department, role_title, cost_center, manager_email, start_date }`
-- App metadata follows: `{ aws_permission_set, github_team, gws_ou, slack_user_group }`
+- User metadata follows: `{ department, role_title, cost_center, manager_email, start_date }` — preserved 1:1 from Auth0 era; Okta profile schema uses the same names (see `config/okta/desired-state.json`)
+- App metadata follows: `{ aws_permission_set, github_team, gws_ou, slack_user_group }` — computed at SAML time in Okta rather than stored on the user profile
 - Roles map to platform access: Engineering→PowerUser+repos, IT-Ops→Admin+manage:users, Finance→ReadOnly+billing
+- Config-as-code pattern is identical across platforms: `config/{platform}/desired-state.json` + `scripts/{platform}/export_config.py` + `scripts/{platform}/reconcile_config.py --audit/--apply/--dry-run`
 
 ## Resume Reference
 Christopher's resume is at `docs/Senior IT Engineer Resume .md`. When generating reports, audit findings, or interview talking points, map sandbox work to the target JD requirements and these specific experiences:
@@ -73,10 +79,10 @@ Christopher's resume is at `docs/Senior IT Engineer Resume .md`. When generating
 |---|---|---|
 | Google Workspace tenant architecture | GWS OU architecture, per-OU policies, Admin SDK automation | Google Workspace admin with HIPAA exception groups (Headspace) |
 | Slack administration and APIs | Slack Admin API, SCIM provisioning, channel governance, app governance | LLM-powered Slack chatbot with LangChain RAG (Headspace) |
-| SSO connections and SCIM from application side | Auth0 → GWS SAML, Auth0 → Slack OIDC, SCIM provisioning pipeline | Okta SCIM/SAML/SSO integrations, zero-touch JML workflows (Headspace) |
+| SSO connections and SCIM from application side | Okta → GWS SAML, Okta → Slack OIDC, SCIM provisioning pipeline (post-Auth0 migration) | Okta SCIM/SAML/SSO integrations, zero-touch JML workflows (Headspace) |
 | Data governance / compartmentalization | Per-OU sharing policies, DLP rules, Drive permission auditing | HIPAA-compliant PHI access controls, least-privilege (Headspace) |
 | Python against SaaS APIs | All automation in Python against Admin SDK, Slack API, Auth0 API | LangChain RAG chatbot, FastAPI, Python automation (Headspace + Buffett AI) |
-| Platform config-as-code | Full config repo with CI/CD for GWS + Slack + Auth0 | CI/CD pipelines, Terraform, branch-based promotion (Buffett AI) |
+| Platform config-as-code | Full config repo with export/reconcile pipeline for Okta + GWS + Slack + Auth0 | CI/CD pipelines, Terraform, branch-based promotion (Buffett AI) |
 | Third-party app governance | GWS + Slack app risk audits, OAuth scope analysis | HIPAA-compliant third-party app integrations (Headspace) |
 | Partner with Security on SaaS hardening | Cross-platform security posture reports, access reviews | Quarterly access reviews, SOC 2 Type II readiness (Headspace) |
 | Final escalation tier | Vendor escalation runbooks with diagnostic scripts | IT Operations lead, cross-functional partner (Headspace) |
@@ -86,4 +92,4 @@ Christopher's resume is at `docs/Senior IT Engineer Resume .md`. When generating
 Every output from agents and skills should be expressible as: "I hit the ceiling of what the admin console could do and solved it in code. In my sandbox, I built [X], which mirrors [JD requirement] and my experience at [Headspace/Buffett AI] where I [specific achievement]."
 
 ## Phase Tracking
-See `it_ops_lab.md` for the full 10-week roadmap. Current focus: Phase 1 (Foundation & Platform Setup — Auth0 done, GWS + Slack pending).
+See `it_ops_lab.md` for the full 10-week roadmap. See `okta_workato_zendesk_slack.md` for the Okta-era JML build plan. Current focus: Okta RBAC foundation (profile schema + department groups + group rules via `scripts/okta/reconcile_config.py`), with GWS done, Slack pending, Auth0 preserved on `auth0_sandbox` branch as snapshot.

@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-04-21T00:00:00+00:00",
+  "oktaDomain": "integrator-2367542.okta.com",
+  "baseProfileDependencies": [
+    "department",
+    "costCenter"
+  ],
+  "profileAttributes": [
+    {
+      "variableName": "role_title",
+      "title": "Role Title",
+      "type": "string",
+      "required": false,
+      "description": "Human-readable role title (e.g., 'Senior Software Engineer'). Preserves Auth0 user_metadata.role_title contract; kept separate from Okta base 'title' to avoid collision.",
+      "permissions": [{"principal": "SELF", "action": "READ_ONLY"}]
+    },
+    {
+      "variableName": "managerEmail",
+      "title": "Manager Email",
+      "type": "string",
+      "required": false,
+      "description": "Primary manager's email. Consumed by future Mover/Leaver flows.",
+      "pattern": ".+@ohmgym\\.com$",
+      "permissions": [{"principal": "SELF", "action": "READ_ONLY"}]
+    },
+    {
+      "variableName": "startDate",
+      "title": "Start Date",
+      "type": "string",
+      "required": false,
+      "description": "ISO date (YYYY-MM-DD). Preserves Auth0 user_metadata.start_date contract.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "permissions": [{"principal": "SELF", "action": "READ_ONLY"}]
+    }
+  ],
+  "groups": [
+    {"name": "Engineering", "description": "Auto-membership via rule-dept-engineering. Source of truth for downstream Engineering access.", "type": "OKTA_GROUP"},
+    {"name": "IT-Ops",      "description": "Auto-membership via rule-dept-it_ops. Source of truth for downstream IT-Ops access.",      "type": "OKTA_GROUP"},
+    {"name": "Finance",     "description": "Auto-membership via rule-dept-finance. Source of truth for downstream Finance access.",     "type": "OKTA_GROUP"},
+    {"name": "Executive",   "description": "Auto-membership via rule-dept-executive. Source of truth for downstream Executive access.", "type": "OKTA_GROUP"},
+    {"name": "Data",        "description": "Auto-membership via rule-dept-data. Source of truth for downstream Data access.",           "type": "OKTA_GROUP"},
+    {"name": "Product",     "description": "Auto-membership via rule-dept-product. Source of truth for downstream Product access.",     "type": "OKTA_GROUP"},
+    {"name": "Design",      "description": "Auto-membership via rule-dept-design. Source of truth for downstream Design access.",       "type": "OKTA_GROUP"},
+    {"name": "HR",          "description": "Auto-membership via rule-dept-hr. Source of truth for downstream HR access.",               "type": "OKTA_GROUP"},
+    {"name": "Sales",       "description": "Auto-membership via rule-dept-sales. Source of truth for downstream Sales access.",         "type": "OKTA_GROUP"},
+    {"name": "Marketing",   "description": "Auto-membership via rule-dept-marketing. Source of truth for downstream Marketing access.", "type": "OKTA_GROUP"}
+  ],
+  "groupRules": [
+    {
+      "name": "rule-dept-engineering",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Engineering\""},
+      "assignUserToGroups": ["Engineering"]
+    },
+    {
+      "name": "rule-dept-it_ops",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"IT-Ops\""},
+      "assignUserToGroups": ["IT-Ops"]
+    },
+    {
+      "name": "rule-dept-finance",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Finance\""},
+      "assignUserToGroups": ["Finance"]
+    },
+    {
+      "name": "rule-dept-executive",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Executive\""},
+      "assignUserToGroups": ["Executive"]
+    },
+    {
+      "name": "rule-dept-data",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Data\""},
+      "assignUserToGroups": ["Data"]
+    },
+    {
+      "name": "rule-dept-product",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Product\""},
+      "assignUserToGroups": ["Product"]
+    },
+    {
+      "name": "rule-dept-design",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Design\""},
+      "assignUserToGroups": ["Design"]
+    },
+    {
+      "name": "rule-dept-hr",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"HR\""},
+      "assignUserToGroups": ["HR"]
+    },
+    {
+      "name": "rule-dept-sales",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Sales\""},
+      "assignUserToGroups": ["Sales"]
+    },
+    {
+      "name": "rule-dept-marketing",
+      "status": "ACTIVE",
+      "expression": {"type": "urn:okta:expression:1.0", "value": "user.department==\"Marketing\""},
+      "assignUserToGroups": ["Marketing"]
+    }
+  ]
+}
