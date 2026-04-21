@@ -120,6 +120,49 @@ Tested across all setting types: security, API controls, Drive, service status. 
 
 **Resolution:** Admin Console is the only write path on Cloud Identity Free. The Python scripts serve as read-only audit and drift detection tools. With a Google Workspace or Cloud Identity Premium license, the same architecture extends to full read-write policy automation.
 
+### Third-Party App Governance Audit
+
+Built `scripts/gws/audit_apps.py` — enumerates every OAuth grant in the tenant via the Admin SDK Tokens API, categorizes each app by the sensitivity of scopes granted (HIGH / MEDIUM / LOW), and generates a risk-tiered governance report.
+
+Risk tiers are based on scope substring matching:
+- **HIGH** — any `admin.*`, `drive`, `gmail`, `cloud-identity`, or `cloud-platform` scope
+- **MEDIUM** — `calendar`, `contacts`, `groups`, `docs`, `sheets`, or similar
+- **LOW** — `openid`, `email`, `profile` only
+
+Report format is designed for quarterly app reviews: a summary table by risk tier, detail tables per app (client_id, users, OUs, scope count), and a per-app scope appendix for HIGH-risk grants.
+
+### Drive Sharing Audit (Data Governance)
+
+Built `scripts/gws/audit_sharing.py` — impersonates each user via domain-wide delegation, lists their Drive files via the Drive v3 API (metadata-readonly scope), and flags over-exposed sharing:
+- **ANYONE_LINK / ANYONE_PUBLIC** — anyone-with-the-link or publicly discoverable
+- **EXTERNAL_USER / EXTERNAL_GROUP / EXTERNAL_DOMAIN** — shared outside the tenant
+- **ROLE_WRITER+** — external parties with edit/comment rights (higher severity)
+
+Findings are aggregated by OU to surface which departments have the most external exposure. Paired with `scripts/gws/seed_drive_testdata.py`, which creates three known-risky files (public link, external share, domain-wide share) so the audit can be validated end-to-end against real findings.
+
+### Group Lifecycle Management
+
+Built `scripts/gws/manage_groups.py` — department-based Google Group lifecycle. One group per department, membership synced from OU placement. Three modes:
+- **`--audit`** — report drift between desired (OU-derived) and actual membership
+- **`--create`** — create any missing department groups
+- **`--sync`** — reconcile membership (add missing, remove extras)
+
+This is the SCIM-style group push pattern done from the application side: Auth0 department metadata → GWS OU placement → Google Group membership, all API-driven.
+
+### Config-as-Code: Export + Reconcile
+
+Built `scripts/gws/export_config.py` and `scripts/gws/reconcile_config.py` — a two-script pipeline that makes the tenant configuration version-controllable.
+
+**Export** pulls OUs, users, groups (with membership), and policy desired state into `config/gws/desired-state.json`. The JSON is committed to git and becomes the authoritative snapshot.
+
+**Reconcile** reads that snapshot, pulls live tenant state, and reports drift in four categories:
+- OUs: missing, extra, description mismatch
+- Users: missing, extra, OU placement, suspended flag
+- Groups: missing, extra, description mismatch
+- Group membership: per-group add/remove
+
+With `--apply`, reconcile remediates drift safely: creates missing OUs/groups, moves users to their desired OU, and syncs group membership. User creation and deletion are intentionally flagged but not auto-applied (creation requires passwords; deletion is destructive).
+
 ## Key Scripts
 
 | Script | Purpose |
@@ -128,6 +171,12 @@ Tested across all setting types: security, API controls, Drive, service status. 
 | `scripts/gws/provision_users.py` | Provision users into correct OUs with org metadata |
 | `scripts/gws/configure_2sv.py` | 2SV policy desired state definition + API exploration |
 | `scripts/gws/audit_policies.py` | Policy audit: read Cloud Identity API, compare against desired state |
+| `scripts/gws/audit_apps.py` | Third-party OAuth app governance audit with HIGH/MEDIUM/LOW risk tiering |
+| `scripts/gws/audit_sharing.py` | Drive sharing audit: per-user impersonation, flags external/public exposure |
+| `scripts/gws/seed_drive_testdata.py` | Seed Drive with test files for audit validation (public link, external, domain) |
+| `scripts/gws/manage_groups.py` | Department group lifecycle: create, sync, audit — membership derived from OU |
+| `scripts/gws/export_config.py` | Export tenant state to `config/gws/desired-state.json` (config-as-code source) |
+| `scripts/gws/reconcile_config.py` | Drift detection + optional remediation against the desired-state snapshot |
 | `scripts/lifecycle/sync_auth0_gws.py` | Auth0 → GWS drift detection with 4 categories + auto-remediation |
 
 ## Technical Decisions

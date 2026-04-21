@@ -1,0 +1,357 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-04-14T05:33:14.750472+00:00",
+  "domain": "ohmgym.com",
+  "customerId": "C02q25mc3",
+  "ous": [
+    {
+      "name": "Data",
+      "orgUnitPath": "/Data",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Data department \u2014 Data Engineers, ML Engineers, Analysts"
+    },
+    {
+      "name": "Design",
+      "orgUnitPath": "/Design",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Design department \u2014 UX/UI Designers, Researchers"
+    },
+    {
+      "name": "Engineering",
+      "orgUnitPath": "/Engineering",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Engineering department"
+    },
+    {
+      "name": "Executive",
+      "orgUnitPath": "/Executive",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Executive team \u2014 C-suite, VPs"
+    },
+    {
+      "name": "Finance",
+      "orgUnitPath": "/Finance",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Finance department \u2014 Accounting, FP&A, Procurement"
+    },
+    {
+      "name": "HR",
+      "orgUnitPath": "/HR",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Human Resources \u2014 People Ops, Recruiting, L&D"
+    },
+    {
+      "name": "IT-Ops",
+      "orgUnitPath": "/IT-Ops",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech IT-Ops department"
+    },
+    {
+      "name": "Marketing",
+      "orgUnitPath": "/Marketing",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Marketing department \u2014 Growth, Content, Brand"
+    },
+    {
+      "name": "Product",
+      "orgUnitPath": "/Product",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Product department \u2014 Product Managers, TPMs"
+    },
+    {
+      "name": "Sales",
+      "orgUnitPath": "/Sales",
+      "parentOrgUnitPath": "/",
+      "description": "NovaTech Sales department \u2014 AEs, SDRs, Sales Ops"
+    }
+  ],
+  "users": [
+    {
+      "primaryEmail": "amanda.scott@ohmgym.com",
+      "givenName": "Amanda",
+      "familyName": "Scott",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Senior Software Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "barbara.long@ohmgym.com",
+      "givenName": "Barbara",
+      "familyName": "Long",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Backend Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "chris@ohmgym.com",
+      "givenName": "Christopher",
+      "familyName": "Weinreich",
+      "orgUnitPath": "/",
+      "suspended": false,
+      "department": "",
+      "title": "",
+      "costCenter": "",
+      "managerEmail": null
+    },
+    {
+      "primaryEmail": "david.baker@ohmgym.com",
+      "givenName": "David",
+      "familyName": "Baker",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Platform Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "dorothy.diaz@ohmgym.com",
+      "givenName": "Dorothy",
+      "familyName": "Diaz",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Engineering Manager",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "nicholas.ross@ohmgym.com",
+      "givenName": "Nicholas",
+      "familyName": "Ross",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "DevOps Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "samantha.anderson@ohmgym.com",
+      "givenName": "Samantha",
+      "familyName": "Anderson",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Software Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "james.smith@ohmgym.com"
+    },
+    {
+      "primaryEmail": "sandra.jones@ohmgym.com",
+      "givenName": "Sandra",
+      "familyName": "Jones",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Frontend Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "sharon.wilson@ohmgym.com",
+      "givenName": "Sharon",
+      "familyName": "Wilson",
+      "orgUnitPath": "/IT-Ops",
+      "suspended": false,
+      "department": "IT-Ops",
+      "title": "IT Systems Administrator",
+      "costCenter": "",
+      "managerEmail": null
+    },
+    {
+      "primaryEmail": "william.robinson@ohmgym.com",
+      "givenName": "William",
+      "familyName": "Robinson",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Staff Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    },
+    {
+      "primaryEmail": "william.sanders@ohmgym.com",
+      "givenName": "William",
+      "familyName": "Sanders",
+      "orgUnitPath": "/Engineering",
+      "suspended": false,
+      "department": "Engineering",
+      "title": "Site Reliability Engineer",
+      "costCenter": "ENG-100",
+      "managerEmail": "samantha.anderson@ohmgym.com"
+    }
+  ],
+  "groups": [
+    {
+      "email": "data@ohmgym.com",
+      "name": "NovaTech Data",
+      "description": "Auto-managed group for NovaTech Data. Members synced from GWS OU /Data via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "design@ohmgym.com",
+      "name": "NovaTech Design",
+      "description": "Auto-managed group for NovaTech Design. Members synced from GWS OU /Design via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "engineering@ohmgym.com",
+      "name": "NovaTech Engineering",
+      "description": "Auto-managed group for NovaTech Engineering. Members synced from GWS OU /Engineering via manage_groups.py.",
+      "memberCount": 9,
+      "members": [
+        {
+          "email": "amanda.scott@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "barbara.long@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "david.baker@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "dorothy.diaz@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "nicholas.ross@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "samantha.anderson@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "sandra.jones@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "william.robinson@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        },
+        {
+          "email": "william.sanders@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        }
+      ]
+    },
+    {
+      "email": "executive@ohmgym.com",
+      "name": "NovaTech Executive",
+      "description": "Auto-managed group for NovaTech Executive. Members synced from GWS OU /Executive via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "finance@ohmgym.com",
+      "name": "NovaTech Finance",
+      "description": "Auto-managed group for NovaTech Finance. Members synced from GWS OU /Finance via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "hr@ohmgym.com",
+      "name": "NovaTech HR",
+      "description": "Auto-managed group for NovaTech HR. Members synced from GWS OU /HR via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "it-ops@ohmgym.com",
+      "name": "NovaTech IT-Ops",
+      "description": "Auto-managed group for NovaTech IT-Ops. Members synced from GWS OU /IT-Ops via manage_groups.py.",
+      "memberCount": 1,
+      "members": [
+        {
+          "email": "sharon.wilson@ohmgym.com",
+          "role": "MEMBER",
+          "type": "USER"
+        }
+      ]
+    },
+    {
+      "email": "marketing@ohmgym.com",
+      "name": "NovaTech Marketing",
+      "description": "Auto-managed group for NovaTech Marketing. Members synced from GWS OU /Marketing via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "product@ohmgym.com",
+      "name": "NovaTech Product",
+      "description": "Auto-managed group for NovaTech Product. Members synced from GWS OU /Product via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    },
+    {
+      "email": "sales@ohmgym.com",
+      "name": "NovaTech Sales",
+      "description": "Auto-managed group for NovaTech Sales. Members synced from GWS OU /Sales via manage_groups.py.",
+      "memberCount": 0,
+      "members": []
+    }
+  ],
+  "policies": {
+    "IT-Ops": {
+      "two_step_verification": "ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Executive": {
+      "two_step_verification": "ENFORCED",
+      "third_party_apps": "BLOCK_ALL_SCOPES"
+    },
+    "Finance": {
+      "two_step_verification": "ENFORCED",
+      "third_party_apps": "BLOCK_ALL_SCOPES"
+    },
+    "HR": {
+      "two_step_verification": "ENFORCED",
+      "third_party_apps": "BLOCK_ALL_SCOPES"
+    },
+    "Engineering": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Data": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Product": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Design": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Sales": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    },
+    "Marketing": {
+      "two_step_verification": "NOT_ENFORCED",
+      "third_party_apps": "INHERITED"
+    }
+  }
+}
