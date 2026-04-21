@@ -13,6 +13,9 @@
         "./terraform",
         "./docs"
       ]
+    },
+    "okta": {
+      "command": "/Users/christopherweinreich/Documents/Projects/okta-mcp-server/run-okta-mcp.sh"
     }
   }
 }
