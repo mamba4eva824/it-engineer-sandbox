@@ -44,7 +44,8 @@
     {"name": "Design",      "description": "Auto-membership via rule-dept-design. Source of truth for downstream Design access.",       "type": "OKTA_GROUP"},
     {"name": "HR",          "description": "Auto-membership via rule-dept-hr. Source of truth for downstream HR access.",               "type": "OKTA_GROUP"},
     {"name": "Sales",       "description": "Auto-membership via rule-dept-sales. Source of truth for downstream Sales access.",         "type": "OKTA_GROUP"},
-    {"name": "Marketing",   "description": "Auto-membership via rule-dept-marketing. Source of truth for downstream Marketing access.", "type": "OKTA_GROUP"}
+    {"name": "Marketing",   "description": "Auto-membership via rule-dept-marketing. Source of truth for downstream Marketing access.", "type": "OKTA_GROUP"},
+    {"name": "access-gws",  "description": "Members receive a Google Workspace / Cloud Identity account via Okta SCIM provisioning. Manual membership (not rule-driven).", "type": "OKTA_GROUP"}
   ],
   "groupRules": [
     {
