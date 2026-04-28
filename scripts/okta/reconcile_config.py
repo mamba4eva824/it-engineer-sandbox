@@ -93,6 +93,29 @@ def fetch_live_rules(session, id_to_name: dict[str, str]) -> dict[str, dict]:
     return rules
 
 
+def fetch_live_app_assignments(session, id_to_name: dict[str, str]) -> dict[str, dict]:
+    """Returns {app_label: {"id": app_id, "groups": [group_names]}}.
+
+    Filters out BROWSER_PLUGIN apps (legacy SWA/password-vault) which are out
+    of scope for config-as-code.
+    """
+    apps: dict[str, dict] = {}
+    for app in paginate(session, api_url("/api/v1/apps"),
+                        params={"filter": 'status eq "ACTIVE"', "limit": 200}):
+        if app.get("signOnMode") == "BROWSER_PLUGIN":
+            continue
+        app_id = app["id"]
+        label = app.get("label", "")
+        groups_resp = session.get(api_url(f"/api/v1/apps/{app_id}/groups"), timeout=15)
+        groups_resp.raise_for_status()
+        group_names = sorted(
+            id_to_name[g["id"]] for g in groups_resp.json()
+            if g["id"] in id_to_name  # only OKTA_GROUP-typed; skip APP_GROUP/BUILT_IN
+        )
+        apps[label] = {"id": app_id, "groups": group_names}
+    return apps
+
+
 # ---------------- Diff ----------------
 
 def diff_schema(desired_attrs: list[dict], live_schema: dict) -> dict:
@@ -152,6 +175,46 @@ def diff_rules(desired_list: list[dict], live_map: dict[str, dict]) -> dict:
                or d.get("status", "ACTIVE") != l["status"]:
                 mismatched.append({"name": name, "desired": d, "actual": l})
     return {"missing": missing, "extra": extra, "mismatched": mismatched, "desired_map": desired_map}
+
+
+def diff_app_assignments(desired_list: list[dict], live_map: dict[str, dict]) -> dict:
+    """Compare desired app->groups against live tenant.
+
+    Conservative semantics: missing assignments will be created on --apply;
+    extras in live (groups assigned in tenant but not in desired) are flagged
+    but never auto-unassigned.
+    """
+    missing: list[tuple[str, str]] = []   # (app_label, group_name)
+    extra: list[tuple[str, str]] = []     # (app_label, group_name)
+    missing_apps: list[str] = []           # app_label not found in live tenant
+    desired_map: dict[str, set[str]] = {}
+
+    for entry in desired_list:
+        label = entry["appLabel"]
+        groups = set(entry.get("groups", []))
+        desired_map[label] = groups
+        if label not in live_map:
+            missing_apps.append(label)
+            for g in sorted(groups):
+                missing.append((label, g))
+            continue
+        live_groups = set(live_map[label]["groups"])
+        for g in sorted(groups - live_groups):
+            missing.append((label, g))
+        for g in sorted(live_groups - groups):
+            extra.append((label, g))
+
+    # Apps assigned in live but not mentioned in desired-state are out of scope:
+    # they're not flagged as drift (we only manage the apps that appear in
+    # desired-state). This keeps the reconciler scoped to apps an operator has
+    # opted into managing as code.
+
+    return {
+        "missing": missing,
+        "extra": extra,
+        "missing_apps": missing_apps,
+        "desired_map": desired_map,
+    }
 
 
 # ---------------- Apply ----------------
@@ -323,28 +386,68 @@ def apply_rules(session, drift: dict, live_rules: dict[str, dict],
     return changes
 
 
+def apply_app_assignments(session, drift: dict, live_apps: dict[str, dict],
+                          name_to_id: dict[str, str], dry_run: bool) -> int:
+    """Create missing app->group assignments. Skip extras (don't unassign).
+
+    Skips app labels not found in the tenant with a warning — the operator
+    must add the app via Okta admin console first (OIN catalog or manual).
+    """
+    changes = 0
+    for label in drift["missing_apps"]:
+        print(f"  SKIP app '{label}': not found in tenant. "
+              f"Add it via Okta admin console (Applications -> Browse App Catalog).")
+
+    for app_label, group_name in drift["missing"]:
+        if app_label in drift["missing_apps"]:
+            continue  # already warned above
+        app_id = live_apps[app_label]["id"]
+        if group_name not in name_to_id:
+            print(f"  SKIP {app_label}: {group_name}: target group not found "
+                  f"(must be in desired-state.json `groups`)")
+            continue
+        if dry_run:
+            print(f"  [DRY RUN] Would assign {app_label} <- {group_name}")
+            changes += 1
+            continue
+        group_id = name_to_id[group_name]
+        resp = session.put(api_url(f"/api/v1/apps/{app_id}/groups/{group_id}"),
+                           json={}, timeout=15)
+        if resp.status_code >= 300:
+            print(f"  FAILED assign {app_label} <- {group_name}: "
+                  f"HTTP {resp.status_code} {resp.text[:200]}")
+            continue
+        print(f"  Assigned {app_label} <- {group_name}")
+        changes += 1
+    return changes
+
+
 # ---------------- Output ----------------
 
-def print_summary(schema_drift, group_drift, rule_drift):
+def print_summary(schema_drift, group_drift, rule_drift, app_drift):
     s_total = len(schema_drift["missing"]) + len(schema_drift["mismatched"]) + len(schema_drift["extra_managed"])
     g_total = len(group_drift["missing"]) + len(group_drift["extra"]) + len(group_drift["description_mismatch"])
     r_total = len(rule_drift["missing"]) + len(rule_drift["extra"]) + len(rule_drift["mismatched"])
+    a_total = len(app_drift["missing"]) + len(app_drift["extra"])
     print(f"\n{'=' * 60}")
     print("OKTA RECONCILE — DRIFT SUMMARY")
     print(f"{'=' * 60}")
-    print(f"  Profile attrs: {s_total}")
-    print(f"    missing:       {len(schema_drift['missing'])}")
-    print(f"    mismatched:    {len(schema_drift['mismatched'])}")
-    print(f"    extra managed: {len(schema_drift['extra_managed'])}")
-    print(f"  Groups:        {g_total}")
-    print(f"    missing:       {len(group_drift['missing'])}")
-    print(f"    extra:         {len(group_drift['extra'])}")
-    print(f"    description:   {len(group_drift['description_mismatch'])}")
-    print(f"  Group rules:   {r_total}")
-    print(f"    missing:       {len(rule_drift['missing'])}")
-    print(f"    extra:         {len(rule_drift['extra'])}")
-    print(f"    mismatched:    {len(rule_drift['mismatched'])}")
-    print(f"  TOTAL drift:   {s_total + g_total + r_total}")
+    print(f"  Profile attrs:    {s_total}")
+    print(f"    missing:        {len(schema_drift['missing'])}")
+    print(f"    mismatched:     {len(schema_drift['mismatched'])}")
+    print(f"    extra managed:  {len(schema_drift['extra_managed'])}")
+    print(f"  Groups:           {g_total}")
+    print(f"    missing:        {len(group_drift['missing'])}")
+    print(f"    extra:          {len(group_drift['extra'])}")
+    print(f"    description:    {len(group_drift['description_mismatch'])}")
+    print(f"  Group rules:      {r_total}")
+    print(f"    missing:        {len(rule_drift['missing'])}")
+    print(f"    extra:          {len(rule_drift['extra'])}")
+    print(f"    mismatched:     {len(rule_drift['mismatched'])}")
+    print(f"  App assignments:  {a_total}")
+    print(f"    missing:        {len(app_drift['missing'])}")
+    print(f"    extra:          {len(app_drift['extra'])}")
+    print(f"  TOTAL drift:      {s_total + g_total + r_total + a_total}")
     print(f"{'=' * 60}")
     for label, items in (
         ("Missing profile attrs", schema_drift["missing"]),
@@ -352,6 +455,9 @@ def print_summary(schema_drift, group_drift, rule_drift):
         ("Extra groups (not in desired)", group_drift["extra"]),
         ("Missing rules", rule_drift["missing"]),
         ("Extra rules (not in desired)", rule_drift["extra"]),
+        ("Missing app assignments", [f"{a}: {g}" for a, g in app_drift["missing"]]),
+        ("Extra app assignments (not in desired)",
+         [f"{a}: {g}" for a, g in app_drift["extra"]]),
     ):
         if items:
             print(f"\n{label}:")
@@ -359,7 +465,7 @@ def print_summary(schema_drift, group_drift, rule_drift):
                 print(f"  - {it}")
 
 
-def generate_report(schema_drift, group_drift, rule_drift, desired_meta, changes_applied=None):
+def generate_report(schema_drift, group_drift, rule_drift, app_drift, desired_meta, changes_applied=None):
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         "# Okta RBAC Foundation — Reconcile Report",
@@ -374,6 +480,7 @@ def generate_report(schema_drift, group_drift, rule_drift, desired_meta, changes
         f"| Profile attributes | {len(schema_drift['missing'])} | {len(schema_drift['extra_managed'])} | {len(schema_drift['mismatched'])} |",
         f"| Groups | {len(group_drift['missing'])} | {len(group_drift['extra'])} | {len(group_drift['description_mismatch'])} |",
         f"| Group rules | {len(rule_drift['missing'])} | {len(rule_drift['extra'])} | {len(rule_drift['mismatched'])} |",
+        f"| App assignments | {len(app_drift['missing'])} | {len(app_drift['extra'])} | 0 |",
         "",
     ]
     if changes_applied is not None:
@@ -390,12 +497,17 @@ def generate_report(schema_drift, group_drift, rule_drift, desired_meta, changes
     section("Missing profile attributes", schema_drift["missing"])
     section("Missing groups", group_drift["missing"])
     section("Missing group rules", rule_drift["missing"])
+    section("Missing app assignments",
+            [f"{a}: {g}" for a, g in app_drift["missing"]])
     section("Extra groups in tenant (not deleted by reconcile)", group_drift["extra"])
     section("Extra group rules in tenant (not deleted by reconcile)", rule_drift["extra"])
+    section("Extra app assignments in tenant (not unassigned by reconcile)",
+            [f"{a}: {g}" for a, g in app_drift["extra"]])
 
     if not any((schema_drift["missing"], schema_drift["mismatched"], schema_drift["extra_managed"],
                 group_drift["missing"], group_drift["extra"], group_drift["description_mismatch"],
-                rule_drift["missing"], rule_drift["extra"], rule_drift["mismatched"])):
+                rule_drift["missing"], rule_drift["extra"], rule_drift["mismatched"],
+                app_drift["missing"], app_drift["extra"])):
         lines.append("**No drift detected** — live tenant matches desired state.\n")
 
     lines.append("---")
@@ -430,15 +542,18 @@ def main():
     live_groups = fetch_live_groups(session)
     id_to_name = {g["id"]: g["name"] for g in live_groups.values()}
     live_rules = fetch_live_rules(session, id_to_name)
+    live_apps = fetch_live_app_assignments(session, id_to_name)
     print(f"  Live: {len(live_schema.get('definitions', {}).get('custom', {}).get('properties', {}) or {})} "
-          f"custom attrs, {len(live_groups)} groups, {len(live_rules)} rules")
+          f"custom attrs, {len(live_groups)} groups, {len(live_rules)} rules, "
+          f"{len(live_apps)} apps")
 
     print("Computing drift...")
     schema_drift = diff_schema(desired.get("profileAttributes", []), live_schema)
     group_drift = diff_groups(desired.get("groups", []), live_groups)
     rule_drift = diff_rules(desired.get("groupRules", []), live_rules)
+    app_drift = diff_app_assignments(desired.get("appAssignments", []), live_apps)
 
-    print_summary(schema_drift, group_drift, rule_drift)
+    print_summary(schema_drift, group_drift, rule_drift, app_drift)
 
     changes_applied = None
     if args.apply:
@@ -456,12 +571,14 @@ def main():
                 name_to_id.setdefault(name, f"DRY_RUN_ID_FOR_{name}")
 
         r_changes = apply_rules(session, rule_drift, live_rules, name_to_id, args.dry_run)
-        changes_applied = s_changes + g_changes + r_changes
+        a_changes = apply_app_assignments(session, app_drift, live_apps, name_to_id, args.dry_run)
+        changes_applied = s_changes + g_changes + r_changes + a_changes
         print(f"\nRemediation: {changes_applied} changes "
-              f"({s_changes} schema, {g_changes} group, {r_changes} rule)")
+              f"({s_changes} schema, {g_changes} group, {r_changes} rule, "
+              f"{a_changes} app assignment)")
 
     if args.report or args.apply:
-        report = generate_report(schema_drift, group_drift, rule_drift, desired, changes_applied)
+        report = generate_report(schema_drift, group_drift, rule_drift, app_drift, desired, changes_applied)
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
         date_str = datetime.now().strftime("%Y-%m-%d-%H%M")
         report_path = REPORTS_DIR / f"okta-rbac-foundation-{date_str}.md"

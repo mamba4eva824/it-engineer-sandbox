@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta RBAC Foundation Report](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 
@@ -40,6 +40,28 @@ Brownfield-safe: the reconcile tool is additive-only (no deletes), pattern was v
 - **Profile attributes**: `role_title`, `managerEmail`, `startDate` (base `department` + `costCenter` reused)
 - **Groups**: Engineering, IT-Ops, Finance, Executive, Data, Product, Design, HR, Sales, Marketing
 - **Group rules**: `user.department == "{Department}"` → auto-assign to matching group (fail-closed)
+- **App→group assignments** (new): `appAssignments` block round-trips through export/reconcile, captured Okta UI clicks as code
+
+### Okta User Provisioning + Federation
+
+8 NovaTech seed users provisioned across Engineering/Product/IT-Ops/Data via `scripts/okta/provision_users.py` (idempotent skip-if-exists, gitignored credentials file). Group rules auto-assigned each user to their department group within ~30s. Okta → GWS SAML federation working end-to-end via the OIN `*Override` API pattern (admin console hides these fields; the API is the canonical source). Disposable test user `test-jml-01@ohmgym.com` proves the SAML+SCIM plumbing without touching the super-admin account. ([changelog](public-docs/04-okta-migration.md))
+
+- **8-user seed** — `config/okta/okta_seed_users.json`, hand-maintained, mirrors `gws_provision_subset.json` shape, respects Okta + Slack tier caps
+- **Three SAML config issues** hit + resolved (SWA→SAML mode, IdP Entity ID mismatch, Audience/ACS override via API) — documented for future operators
+- **`apply_slack_saml_overrides.py`** — reusable CLI for the same `*Override` pattern, applied to the Slack OIN app (different SP, same mechanism)
+
+### Slack SCIM Lifecycle
+
+Okta-managed SCIM proven both directions to Slack Enterprise Grid sandbox: provisioning on group assign, deactivation on group unassign, **reactivation** of existing identities (preserves DM history, channel memberships, audit trail) on re-assign. Two trigger surfaces share the same SCIM channel — UI for the analyst-friendly flow, config-as-code (`appAssignments` reconciler) for the engineer-grade flow with drift detection. ([changelog](public-docs/05-slack-scim-lifecycle.md))
+
+```bash
+python scripts/slack/audit_log_query.py --action user_created --since 5m
+python scripts/slack/audit_log_query.py --action user_deactivated --since 5m
+```
+
+- **Slack Audit Logs API foundation** — `scripts/slack/_client.py` handles xoxp- token auth, the `{ok:false}` error envelope, 429 retry, cursor pagination, dual base URLs (Web API + Audit API)
+- **Seat-cap diagnosis** — Slack Developer Sandbox 8-active-user cap surfaces as HTTP 500 `user_creation_failed`; diagnosed by counting active users in the audit log (Slack admin UI lags by minutes)
+- **SAML still broken** (`sso_failed=1`) — parked; SCIM works around it, Phase 6+ revisits with HAR capture or Slack Support
 
 ### Identity Federation (Auth0 → AWS + Google Workspace) — preserved
 
@@ -70,17 +92,16 @@ Full OU structure mirroring NovaTech's 10 departments in Google Cloud Identity F
 
 ### Cross-Platform Drift Detection
 
-Sync engine that uses the IdP (currently Auth0) as source of truth and detects drift across Google Workspace. An Okta-sourced equivalent (`sync_okta_gws.py`) is the next step once Okta user provisioning is live.
+Sync engine that uses the IdP as source of truth and detects drift across downstream platforms. The Auth0 era (`sync_auth0_gws.py`) is preserved on `auth0_sandbox`; the Okta-era foundation now exists implicitly in `reconcile_config.py` (which detects drift on app→group assignments across all OIN apps). A unified `sync_okta_all.py` covering GWS + Slack + Zendesk simultaneously is the Phase 7 deliverable.
 
 ```bash
-python scripts/lifecycle/sync_auth0_gws.py --admin-email admin@domain.com --report
+python scripts/okta/reconcile_config.py             # drift across attrs, groups, rules, app assignments
+python scripts/lifecycle/sync_auth0_gws.py --report  # Auth0-era cross-platform drift (preserved)
 ```
 
-Detects four categories: OU mismatches (auto-remediated), missing-from-GWS, orphaned-in-GWS, unknown-department.
+### User Lifecycle Automation — Joiner + Mover live, Leaver next
 
-### User Lifecycle Automation — Auth0 era preserved; Okta-era next phase
-
-Python scripts for the full Joiner/Mover/Leaver lifecycle across Auth0 and Google Workspace. The Okta-era JML design (including Zendesk as the audit trail + agent-seat provisioning target) is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md) and will be built against the RBAC foundation above. ([Auth0 provisioning details](public-docs/01-auth0-identity-platform.md))
+`scripts/lifecycle/joiner_workflow.py` orchestrates Okta user creation → group rules fire → SCIM push to Slack/GWS → audit post. `scripts/lifecycle/mover_workflow.py` handles department transfers: Okta attribute update → group rules re-fire → GWS OU move + Slack DM to new manager + audit post. Both write structured JSON logs to gitignored `logs/` for replay. Leaver flow is the next step (also unblocks Slack seat-cap pressure by deactivating obsolete demo accounts). The full JML design is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md).
 
 ### Email Domain Migration
 
@@ -96,17 +117,18 @@ Migrated 100 Auth0 users from one domain to another via the Management API — u
                     │  10 dept groups + rules    │
                     └────────────┬──────────────┘
                                  │
-               (future: SAML/OIDC federation)
+               SAML federation + SCIM provisioning
                                  │
          ┌───────────────────────┼───────────────────────┐
          │                       │                       │
     ┌────▼──────┐      ┌────────▼────────┐     ┌────────▼────────┐
-    │ AWS IAM   │      │ Google Cloud    │     │ Slack Developer │
-    │ Identity  │      │ Identity Free   │     │ Sandbox         │
+    │ AWS IAM   │      │ Google Cloud    │     │ Slack Enterprise│
+    │ Identity  │      │ Identity Free   │     │ Grid Sandbox    │
     │ Center    │      │                 │     │                 │
-    │           │      │ 10 dept OUs     │     │ Admin API       │
-    │ 3 Perm    │      │ Per-OU 2SV      │     │ SCIM            │
-    │ Sets      │      │ SSO profiles    │     │ Channel gov.    │
+    │ (deferred)│      │ SAML ✅          │     │ SAML ❌ parked   │
+    │           │      │ SCIM ✅          │     │ SCIM ✅ live     │
+    │ 3 Perm    │      │ 10 dept OUs     │     │ Audit Logs API  │
+    │ Sets      │      │ Per-OU 2SV      │     │ Channel gov.    │
     └───────────┘      └────────┬────────┘     └─────────────────┘
                                 │
                     ┌───────────▼───────────────────┐
@@ -149,9 +171,14 @@ User metadata contract (preserved across Auth0 → Okta): `{ department, role_ti
 | Script | What It Does |
 |---|---|
 | `scripts/okta/test_connection.py` | Smoke-test Okta API creds; prints granted scopes |
-| `scripts/okta/export_config.py` | Live Okta tenant → `config/okta/desired-state.json` (with `.tmp` write + clobber guard) |
-| `scripts/okta/reconcile_config.py` | Audit / dry-run / apply drift; emits markdown report to `public-docs/reports/` |
+| `scripts/okta/export_config.py` | Live Okta tenant → `config/okta/desired-state.json` (now exports `appAssignments` + preserves hand-maintained keys) |
+| `scripts/okta/reconcile_config.py` | Audit / dry-run / apply drift across schema, groups, group rules, **and app→group assignments**; emits markdown report |
+| `scripts/okta/provision_users.py` | Batch-create the 8-user NovaTech seed across 4 departments; idempotent skip-if-exists; gitignored creds file |
+| `scripts/okta/apply_slack_saml_overrides.py` | One-purpose CLI that PUTs the four `*Override` SAML fields on the Slack OIN app (the API-only escape hatch documented in `04-okta-migration.md` §"Issue 3") |
 | `scripts/okta/_client.py` | Private Key JWT auth helper (shared by all Okta scripts; same creds as MCP server) |
+| `scripts/slack/_client.py` · `_post.py` · `audit_log_query.py` · `test_connection.py` | Slack API foundation: GET/POST helpers with `{ok:false}` envelope handling, Audit Logs API CLI for SCIM/SAML diagnostics |
+| `scripts/lifecycle/joiner_workflow.py` | End-to-end Joiner: Okta create → group rules fire → SCIM push to GWS+Slack → audit post |
+| `scripts/lifecycle/mover_workflow.py` | Department change → Okta attr update → group rules re-fire → GWS OU move + Slack DM/audit |
 | `scripts/gws/export_config.py` · `reconcile_config.py` | GWS equivalent — same pattern, same flags |
 | `scripts/gws/create_ous.py` · `provision_users.py` · `configure_2sv.py` | Directory API automation + 2SV policy audit |
 | `scripts/lifecycle/sync_auth0_gws.py` | Cross-platform drift detection: Auth0 departments vs. GWS OU placement |
@@ -177,8 +204,15 @@ scripts/
   okta/                            # Okta Management API — RBAC config-as-code
     _client.py                     #   Shared Private Key JWT auth helper
     test_connection.py             #   Creds + scope smoke test
-    export_config.py               #   Live tenant → desired-state.json
-    reconcile_config.py            #   Audit / apply / dry-run drift reconciliation
+    export_config.py               #   Live tenant → desired-state.json (incl. appAssignments)
+    reconcile_config.py            #   Audit / apply / dry-run drift across attrs, groups, rules, app assignments
+    provision_users.py             #   Batch user creation from config/okta/okta_seed_users.json
+    apply_slack_saml_overrides.py  #   PUT the 4 *Override SAML fields on the Slack OIN app (API-only)
+  slack/                           # Slack Web + Audit Logs API foundation
+    _client.py                     #   xoxp- token, {ok:false} envelope, cursor pagination
+    _post.py                       #   POST helpers (chat.postMessage, conversations.open)
+    test_connection.py             #   Auth + auditlogs:read smoke test
+    audit_log_query.py             #   Slack Enterprise Audit Logs CLI (SCIM/SAML observability)
   auth0/                           # Preserved Auth0 Management API automation
     generate_users.py  provision_users.py  update_user_emails.py
     assign_role_permissions.py
@@ -191,13 +225,18 @@ scripts/
     audit_apps.py  audit_sharing.py  audit_policies.py  manage_groups.py
   lifecycle/                       # Cross-platform identity automation
     sync_auth0_gws.py              #   Auth0 → GWS drift detection + remediation
+    joiner_workflow.py             #   End-to-end Joiner: Okta create → SCIM → audit post
+    mover_workflow.py              #   Dept change: Okta attr → group rules → GWS OU + Slack DM
 config/
-  okta/desired-state.json          # Okta RBAC source of truth (groups, rules, attrs)
+  okta/desired-state.json          # Okta RBAC source of truth (groups, rules, attrs, app assignments)
+  okta/okta_seed_users.json        # 8 NovaTech seed users across Engineering/Product/IT-Ops/Data
   gws/desired-state.json           # GWS source of truth (OUs, users, groups, policies)
 public-docs/
   01-auth0-identity-platform.md
   02-aws-saml-federation.md
   03-gws-federation-and-administration.md
+  04-okta-migration.md             # Okta → GWS federation changelog incl. *Override pattern
+  05-slack-scim-lifecycle.md       # Okta → Slack SCIM lifecycle (provision/deprovision/reactivate)
   reports/                         # Auto-generated reconcile reports (demoable)
 terraform/
   auth0/                           # Auth0 tenant-as-code (planned)
@@ -213,6 +252,8 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | Tenant setup, 100-user provisioning, RBAC architecture, email domain migration, Auth0 Actions, Okta concept mapping |
 | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | SAML 2.0 architecture, Permission Sets, attribute mapping, troubleshooting (audience + NameID mismatches), debugging methodology |
 | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | Cloud Identity setup, OU architecture, SAML federation, per-OU 2SV + app governance, drift detection, policy audit, API limitation discovery |
+| [Okta Migration](public-docs/04-okta-migration.md) | Okta → GWS federation test changelog: SAML+SCIM end-to-end via test user, three SAML config issues hit + resolved, the OIN `*Override` API pattern |
+| [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | Okta → Slack SCIM provisioning/deprovisioning/reactivation proven both directions; UI-vs-CaC dual mechanism; 8-user seat-cap diagnosis from audit logs |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 
@@ -220,15 +261,15 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 
 ### Progress at a glance
 
-**3 complete · 1 partial · 4 planned** — the identity-layer foundations are in place; the next cycle shifts from "build the skeleton" to "plug downstream systems into it."
+**4 complete · 2 partial · 3 planned** — identity layer + provisioning + downstream SCIM all proven on real test users. Slack SAML is the one remaining blocker; SCIM works around it.
 
 ### Most recent milestone
 
-**Phase 3 — Okta RBAC Foundation (shipped):** config-as-code pipeline for 10 department groups, 10 attribute-driven group rules, and 3 custom profile attributes. Round-trip drift test passes at zero. Okta MCP server connected to Claude Code. Demoable report at [`public-docs/reports/`](public-docs/reports/).
+**Phase 5 partial — Slack SCIM Lifecycle (shipped):** end-to-end Okta → Slack SCIM provisioning proven via both UI assignment and config-as-code (`appAssignments` reconciler). Deprovisioning, reactivation (with audit-trail preservation), and 8-user seat-cap behavior all observed and documented in [`public-docs/05-slack-scim-lifecycle.md`](public-docs/05-slack-scim-lifecycle.md). Slack Audit Logs API foundation (`scripts/slack/`) provides the observability layer. Slack SAML still failing at `sso_failed=1` — parked; SCIM is independent.
 
 ### Next up
 
-**Phase 4 — Okta User Provisioning + Federation.** Pick 5–8 representative users across 3–4 departments (respecting the 10-user Okta free-tier cap), build `scripts/okta/provision_users.py` mirroring the Auth0 pattern, then re-federate AWS IAM Identity Center and Google Cloud Identity against Okta. This unblocks everything downstream — group rules can only prove themselves once actual users carry `department` attributes, and SAML federation is the prerequisite for any real JML flow.
+**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. Phase 4 is functionally complete (8-user seed provisioned, Okta → GWS federation working with the `*Override` pattern, AWS deferred). Phase 3.4 Leaver flow is the natural unblocker for the seat-cap pressure on Slack.
 
 ### Full phase tracker
 
@@ -236,12 +277,12 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 |---|---|---|---|
 | 1 | Auth0 Foundation | Tenant, RBAC, SAML → AWS + GWS, post-login Actions | ✅ Complete — preserved on [`auth0_sandbox`](../../tree/auth0_sandbox) |
 | 2 | Google Workspace Architecture | OU hierarchy, per-OU 2SV + app governance, `reconcile_config.py` | ✅ Complete |
-| 3 | Okta RBAC Foundation | Profile schema, dept groups, group rules, config-as-code pipeline | ✅ **Complete (current)** |
-| 4 | Okta User Provisioning + Federation | 5–8 test users · Okta → GWS SAML · Okta → AWS SAML | ⏳ Planned — next up |
-| 5 | Slack Platform Engineering | SCIM provisioning, channel governance, app management | ⏳ Planned |
+| 3 | Okta RBAC Foundation | Profile schema, dept groups, group rules, config-as-code pipeline | ✅ Complete |
+| 4 | Okta User Provisioning + Federation | 8 seed users · Okta → GWS SAML (`*Override` pattern) · Okta → AWS deferred | ✅ Complete (AWS deferred) |
+| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, **SAML still broken** | 🚧 **Partial (current)** — SCIM ✅, SAML ❌ |
 | 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned |
 | 7 | Cross-Platform Identity | `sync_okta_all.py` drift detection across all JML targets | ⏳ Planned |
-| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs, Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 MCP servers connected |
+| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs, Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; MCP connected |
 
 ### How the phases map to the Enterprise SaaS Engineer JD
 

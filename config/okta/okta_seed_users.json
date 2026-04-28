@@ -1,0 +1,98 @@
+[
+  {
+    "email": "samantha.anderson@ohmgym.com",
+    "given_name": "Samantha",
+    "family_name": "Anderson",
+    "user_metadata": {
+      "department": "Engineering",
+      "role_title": "Software Engineer",
+      "cost_center": "ENG-100",
+      "manager_email": "james.smith@ohmgym.com",
+      "start_date": "2023-11-08"
+    }
+  },
+  {
+    "email": "amanda.scott@ohmgym.com",
+    "given_name": "Amanda",
+    "family_name": "Scott",
+    "user_metadata": {
+      "department": "Engineering",
+      "role_title": "Senior Software Engineer",
+      "cost_center": "ENG-100",
+      "manager_email": "samantha.anderson@ohmgym.com",
+      "start_date": "2024-08-07"
+    }
+  },
+  {
+    "email": "william.robinson@ohmgym.com",
+    "given_name": "William",
+    "family_name": "Robinson",
+    "user_metadata": {
+      "department": "Engineering",
+      "role_title": "Staff Engineer",
+      "cost_center": "ENG-100",
+      "manager_email": "samantha.anderson@ohmgym.com",
+      "start_date": "2025-11-28"
+    }
+  },
+  {
+    "email": "samantha.diaz@ohmgym.com",
+    "given_name": "Samantha",
+    "family_name": "Diaz",
+    "user_metadata": {
+      "department": "Product",
+      "role_title": "Product Manager",
+      "cost_center": "PROD-600",
+      "manager_email": "james.smith@ohmgym.com",
+      "start_date": "2024-08-13"
+    }
+  },
+  {
+    "email": "heather.robinson@ohmgym.com",
+    "given_name": "Heather",
+    "family_name": "Robinson",
+    "user_metadata": {
+      "department": "Product",
+      "role_title": "Senior Product Manager",
+      "cost_center": "PROD-600",
+      "manager_email": "samantha.diaz@ohmgym.com",
+      "start_date": "2024-03-03"
+    }
+  },
+  {
+    "email": "alexander.robinson@ohmgym.com",
+    "given_name": "Alexander",
+    "family_name": "Robinson",
+    "user_metadata": {
+      "department": "IT-Ops",
+      "role_title": "IT Systems Engineer",
+      "cost_center": "IT-200",
+      "manager_email": "james.smith@ohmgym.com",
+      "start_date": "2025-09-23"
+    }
+  },
+  {
+    "email": "sharon.wilson@ohmgym.com",
+    "given_name": "Sharon",
+    "family_name": "Wilson",
+    "user_metadata": {
+      "department": "IT-Ops",
+      "role_title": "Senior IT Engineer",
+      "cost_center": "IT-200",
+      "manager_email": "alexander.robinson@ohmgym.com",
+      "start_date": "2025-10-19"
+    }
+  },
+  {
+    "email": "heather.gutierrez@ohmgym.com",
+    "given_name": "Heather",
+    "family_name": "Gutierrez",
+    "user_metadata": {
+      "department": "Data",
+      "role_title": "Data Engineer",
+      "cost_center": "DATA-500",
+      "manager_email": "james.smith@ohmgym.com",
+      "start_date": "2024-08-09"
+    }
+  }
+]

@@ -96,7 +96,34 @@ def export_group_rules(session, group_id_to_name: dict[str, str]) -> list[dict]:
     return rules
 
 
-def build_snapshot(session) -> dict:
+def export_app_assignments(session, group_id_to_name: dict[str, str]) -> list[dict]:
+    """List active OIN/SAML/OIDC apps and the groups assigned to each.
+
+    Filters out browser-plugin (legacy SWA) apps which are out of scope for
+    config-as-code. Result shape is a sorted list of {appLabel, groups},
+    matching the desired-state.json convention of name-based references.
+    """
+    assignments = []
+    for app in paginate(session, api_url("/api/v1/apps"),
+                        params={"filter": 'status eq "ACTIVE"', "limit": 200}):
+        if app.get("signOnMode") == "BROWSER_PLUGIN":
+            continue
+        app_id = app["id"]
+        app_label = app.get("label", "")
+        groups_resp = session.get(api_url(f"/api/v1/apps/{app_id}/groups"), timeout=15)
+        groups_resp.raise_for_status()
+        group_names = sorted(
+            group_id_to_name.get(g["id"]) for g in groups_resp.json()
+            if group_id_to_name.get(g["id"])  # only OKTA_GROUP-typed groups
+        )
+        if not group_names:
+            continue  # apps with no group assignments aren't interesting
+        assignments.append({"appLabel": app_label, "groups": group_names})
+    assignments.sort(key=lambda a: a["appLabel"])
+    return assignments
+
+
+def build_snapshot(session, preserve_from: dict | None = None) -> dict:
     print("Exporting profile attributes...")
     attrs = export_profile_attributes(session)
     print(f"  {len(attrs)} managed attributes")
@@ -110,18 +137,30 @@ def build_snapshot(session) -> dict:
     rules = export_group_rules(session, id_to_name)
     print(f"  {len(rules)} group rules")
 
+    print("Exporting app assignments...")
+    app_assignments = export_app_assignments(session, id_to_name)
+    print(f"  {len(app_assignments)} apps with group assignments")
+
     # Strip internal-only ids before writing
     for g in groups:
         g.pop("id", None)
 
-    return {
+    snapshot = {
         "schemaVersion": 1,
         "exportedAt": datetime.now(timezone.utc).isoformat(),
         "oktaDomain": OKTA_ORG_URL.replace("https://", "").replace("http://", ""),
-        "profileAttributes": attrs,
-        "groups": groups,
-        "groupRules": rules,
     }
+    # Preserve hand-maintained keys (e.g. baseProfileDependencies) from the
+    # existing file so a routine export doesn't strip them.
+    if preserve_from:
+        for k in ("baseProfileDependencies",):
+            if k in preserve_from:
+                snapshot[k] = preserve_from[k]
+    snapshot["profileAttributes"] = attrs
+    snapshot["groups"] = groups
+    snapshot["groupRules"] = rules
+    snapshot["appAssignments"] = app_assignments
+    return snapshot
 
 
 def _diff(existing: str, new: str) -> list[str]:
@@ -146,14 +185,21 @@ def main():
     session, _ = get_session()
     print("Authenticated with Okta Management API\n")
 
-    snapshot = build_snapshot(session)
+    out_path = Path(args.out)
+    preserve_from = None
+    if out_path.exists():
+        try:
+            preserve_from = json.loads(out_path.read_text())
+        except json.JSONDecodeError:
+            preserve_from = None
+
+    snapshot = build_snapshot(session, preserve_from=preserve_from)
     new_json = json.dumps(snapshot, indent=2, sort_keys=False) + "\n"
 
     if args.pretty:
         print(new_json)
         return
 
-    out_path = Path(args.out)
     if out_path.exists() and not args.force:
         existing = out_path.read_text()
         # Strip the exportedAt timestamp before comparing so routine re-exports
