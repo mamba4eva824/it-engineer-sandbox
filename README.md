@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [Reconcile reports](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 
@@ -99,9 +99,17 @@ python scripts/okta/reconcile_config.py             # drift across attrs, groups
 python scripts/lifecycle/sync_auth0_gws.py --report  # Auth0-era cross-platform drift (preserved)
 ```
 
-### User Lifecycle Automation — Joiner + Mover live, Leaver next
+### User Lifecycle Automation — full JML triplet live (Joiner + Mover + Leaver)
 
-`scripts/lifecycle/joiner_workflow.py` orchestrates Okta user creation → group rules fire → SCIM push to Slack/GWS → audit post. Two modes: default uses `?activate=true` with a generated password (fast iteration), `--use-activation-email` creates the user STAGED and triggers Okta's activation email (production-realistic flow, paired with Gmail `+` subaddressing to route mail to your existing inbox). `scripts/lifecycle/mover_workflow.py` handles department transfers: Okta attribute update → group rules re-fire → GWS OU move + Slack DM to new manager + audit post. Both write structured JSON logs to gitignored `logs/` for replay. Leaver flow is the next step (also unblocks Slack seat-cap pressure by deactivating obsolete demo accounts). End-to-end Joiner walkthrough with audit-log evidence on both IdP + SP sides: [`public-docs/06-end-to-end-joiner-demo.md`](public-docs/06-end-to-end-joiner-demo.md). The full JML design is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md).
+The three sides of the JML triangle are all shipped and verified end-to-end against real personas:
+
+- **`scripts/lifecycle/joiner_workflow.py`** — orchestrates Okta user creation → group rules fire → SCIM push to Slack/GWS → audit post. Two modes: default uses `?activate=true` with a generated password (fast iteration), `--use-activation-email` creates the user STAGED and triggers Okta's activation email (production-realistic flow, paired with Gmail `+` subaddressing to route mail to your existing inbox). End-to-end demo against Sandra Jones: [`public-docs/06-end-to-end-joiner-demo.md`](public-docs/06-end-to-end-joiner-demo.md).
+
+- **`scripts/lifecycle/mover_workflow.py`** — handles department transfers: Okta attribute update → group rules re-fire → GWS OU move + Slack DM to new manager + audit post.
+
+- **`scripts/lifecycle/leaver_workflow.py`** — security-critical offboarding: revoke Okta sessions BEFORE deactivating (so existing tokens can't be replayed), then deactivate the Okta user, which triggers SCIM DELETE cascade to Slack within ~3 seconds. GWS suspension gracefully handles the +alias case. Idempotent on re-run. End-to-end demo against the same Sandra Jones from the Joiner: [`public-docs/07-end-to-end-leaver-demo.md`](public-docs/07-end-to-end-leaver-demo.md).
+
+All three write structured JSON logs to gitignored `logs/<workflow>-events.jsonl` for replay/forensics. The Sandra Jones arc — Joiner → activation → Leaver — runs in under 2 minutes of automation time end-to-end, with audit-log evidence on both Okta and Slack sides at every step. The full JML design is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md).
 
 ### Email Domain Migration
 
@@ -179,6 +187,7 @@ User metadata contract (preserved across Auth0 → Okta): `{ department, role_ti
 | `scripts/slack/_client.py` · `_post.py` · `audit_log_query.py` · `test_connection.py` | Slack API foundation: GET/POST helpers with `{ok:false}` envelope handling, Audit Logs API CLI for SCIM/SAML diagnostics |
 | `scripts/lifecycle/joiner_workflow.py` | End-to-end Joiner: STAGED + activation email (production-realistic) or pre-set password (fast iteration). Group rules fire → SCIM cascade to GWS+Slack |
 | `scripts/lifecycle/mover_workflow.py` | Department change → Okta attr update → group rules re-fire → GWS OU move + Slack DM/audit |
+| `scripts/lifecycle/leaver_workflow.py` | Offboarding: revoke sessions → Okta deactivate → SCIM DELETE cascade to Slack → GWS suspend (graceful +alias handling). Idempotent. |
 | `scripts/gws/export_config.py` · `reconcile_config.py` | GWS equivalent — same pattern, same flags |
 | `scripts/gws/create_ous.py` · `provision_users.py` · `configure_2sv.py` | Directory API automation + 2SV policy audit |
 | `scripts/lifecycle/sync_auth0_gws.py` | Cross-platform drift detection: Auth0 departments vs. GWS OU placement |
@@ -227,6 +236,7 @@ scripts/
     sync_auth0_gws.py              #   Auth0 → GWS drift detection + remediation
     joiner_workflow.py             #   End-to-end Joiner: STAGED + activation email OR pre-set password
     mover_workflow.py              #   Dept change: Okta attr → group rules → GWS OU + Slack DM
+    leaver_workflow.py             #   Offboarding: sessions revoke → Okta deactivate → SCIM cascade
 config/
   okta/desired-state.json          # Okta RBAC source of truth (groups, rules, attrs, app assignments)
   okta/okta_seed_users.json        # 8 NovaTech seed users across Engineering/Product/IT-Ops/Data
@@ -238,6 +248,7 @@ public-docs/
   04-okta-migration.md             # Okta → GWS federation changelog incl. *Override pattern
   05-slack-scim-lifecycle.md       # Okta → Slack SCIM lifecycle (provision/deprovision/reactivate)
   06-end-to-end-joiner-demo.md     # Live trace of joiner_workflow.py --use-activation-email
+  07-end-to-end-leaver-demo.md     # Live trace of leaver_workflow.py — closes the JML triplet
   reports/                         # Auto-generated reconcile reports (demoable)
 terraform/
   auth0/                           # Auth0 tenant-as-code (planned)
@@ -256,6 +267,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [Okta Migration](public-docs/04-okta-migration.md) | Okta → GWS federation test changelog: SAML+SCIM end-to-end via test user, three SAML config issues hit + resolved, the OIN `*Override` API pattern |
 | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | Okta → Slack SCIM provisioning/deprovisioning/reactivation proven both directions; UI-vs-CaC dual mechanism; 8-user seat-cap diagnosis from audit logs |
 | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | Live trace of `joiner_workflow.py --use-activation-email`: STAGED user → activation email (Gmail `+` routing) → group rule fire → SCIM cascade to Slack → incognito sign-in. Audit-log evidence on both Okta + Slack sides. |
+| [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | Live trace of `leaver_workflow.py` against the same Sandra: sessions revoked → Okta deactivate → SCIM DELETE cascade to Slack in 3 seconds. Idempotent re-run validated. Closes the JML triplet. |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 
@@ -263,15 +275,15 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 
 ### Progress at a glance
 
-**4 complete · 2 partial · 3 planned** — identity layer + provisioning + downstream SCIM all proven on real test users. Slack SAML is the one remaining blocker; SCIM works around it.
+**4 complete · 2 partial · 2 planned** — identity layer + provisioning + downstream SCIM + full JML triplet (Joiner/Mover/Leaver) all proven on real test users. Slack SAML is the one remaining blocker on Phase 5; SCIM works around it.
 
 ### Most recent milestone
 
-**Phase 5 partial — Slack SCIM Lifecycle (shipped):** end-to-end Okta → Slack SCIM provisioning proven via both UI assignment and config-as-code (`appAssignments` reconciler). Deprovisioning, reactivation (with audit-trail preservation), and 8-user seat-cap behavior all observed and documented in [`public-docs/05-slack-scim-lifecycle.md`](public-docs/05-slack-scim-lifecycle.md). Slack Audit Logs API foundation (`scripts/slack/`) provides the observability layer. Slack SAML still failing at `sso_failed=1` — parked; SCIM is independent.
+**Full JML triplet shipped (Joiner + Mover + Leaver), end-to-end against a real persona.** Sandra Jones (Engineering, Frontend Engineer) was created via `joiner_workflow.py --use-activation-email` (STAGED + activation email via Gmail `+` subaddressing), activated through the real Okta welcome flow in incognito, then deactivated via `leaver_workflow.py` with security-critical session-revocation-before-deactivate ordering and SCIM cascade to Slack in 3 seconds. Both flows have full audit-log evidence on Okta + Slack sides. Documented in [`public-docs/06`](public-docs/06-end-to-end-joiner-demo.md) and [`public-docs/07`](public-docs/07-end-to-end-leaver-demo.md).
 
 ### Next up
 
-**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. Phase 4 is functionally complete (8-user seed provisioned, Okta → GWS federation working with the `*Override` pattern, AWS deferred). Phase 3.4 Leaver flow is the natural unblocker for the seat-cap pressure on Slack.
+**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. The JML triplet is functionally complete; Zendesk would extend it with audit-trail-as-tickets (per ADR-004) and agent-seat provisioning. Slack SAML diagnosis remains parked behind HAR capture or Slack Support.
 
 ### Full phase tracker
 
@@ -281,8 +293,8 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | 2 | Google Workspace Architecture | OU hierarchy, per-OU 2SV + app governance, `reconcile_config.py` | ✅ Complete |
 | 3 | Okta RBAC Foundation | Profile schema, dept groups, group rules, config-as-code pipeline | ✅ Complete |
 | 4 | Okta User Provisioning + Federation | 8 seed users · Okta → GWS SAML (`*Override` pattern) · Okta → AWS deferred | ✅ Complete (AWS deferred) |
-| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, **SAML still broken** | 🚧 **Partial (current)** — SCIM ✅, SAML ❌ |
-| 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned |
+| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, full JML triplet (Joiner/Mover/Leaver) live, **SAML still broken** | 🚧 **Partial (current)** — SCIM + JML ✅, SAML ❌ |
+| 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned (next up) |
 | 7 | Cross-Platform Identity | `sync_okta_all.py` drift detection across all JML targets | ⏳ Planned |
 | 8 | Config-as-Code & AI Ops | CI/CD for tenant configs, Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; MCP connected |
 
