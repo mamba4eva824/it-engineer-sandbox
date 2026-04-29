@@ -93,6 +93,46 @@ def create_user(session, profile: dict, password: str) -> tuple[str, str]:
     return "failed", f"HTTP {resp.status_code}: {resp.text[:200]}"
 
 
+def create_user_staged(session, profile: dict) -> tuple[str, str]:
+    """POST a user with activate=false and no credentials. Returns (status, user_id_or_error).
+
+    User lands in STAGED status. Caller must follow up with
+    activate_user_with_email() to send the activation email and move them
+    to PROVISIONED (or skip the email for a different activation path).
+    """
+    body = {"profile": profile}
+    resp = session.post(
+        api_url("/api/v1/users"),
+        params={"activate": "false"},
+        json=body,
+        timeout=30,
+    )
+    if resp.status_code == 200:
+        return "created", resp.json()["id"]
+    if resp.status_code == 400:
+        body = resp.json()
+        if body.get("errorCode") == "E0000001" and "already exists" in resp.text.lower():
+            return "exists", ""
+    return "failed", f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+
+def activate_user_with_email(session, user_id: str) -> tuple[str, str]:
+    """POST /users/{id}/lifecycle/activate?sendEmail=true. Returns (status, detail).
+
+    Triggers Okta to send the activation email to the user's email address.
+    On success the user moves from STAGED to PROVISIONED; the response body
+    contains an activationUrl that's also embedded in the email.
+    """
+    resp = session.post(
+        api_url(f"/api/v1/users/{user_id}/lifecycle/activate"),
+        params={"sendEmail": "true"},
+        timeout=15,
+    )
+    if resp.status_code == 200:
+        return "activated", resp.json().get("activationUrl", "")
+    return "failed", f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Provision NovaTech seed users into Okta.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned payloads, make no API calls.")

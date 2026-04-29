@@ -39,6 +39,15 @@ Usage:
 
   # Skip GWS (no alias creation) — useful when --email is a real domain user
   python scripts/lifecycle/joiner_workflow.py ... --skip-gws-alias
+
+  # Production-realistic activation: creates STAGED user, sends activation email
+  # to the +-routed inbox. Best for interview demo / end-to-end screen-share.
+  python scripts/lifecycle/joiner_workflow.py \\
+      --first-name Sandra --last-name Jones \\
+      --department Engineering --role-title "Frontend Engineer" \\
+      --cost-center ENG-100 --manager-email samantha.anderson@ohmgym.com \\
+      --start-date 2026-05-04 --email chris+sandra@ohmgym.com \\
+      --use-activation-email
 """
 
 import argparse
@@ -248,6 +257,13 @@ def main():
     parser.add_argument("--skip-gws-alias", action="store_true", help="Skip the GWS alias step.")
     parser.add_argument("--skip-slack", action="store_true", help="Skip the #it-ops-audit post.")
     parser.add_argument(
+        "--use-activation-email",
+        action="store_true",
+        help="Create user as STAGED + send activation email (production-realistic flow). "
+        "Default is to create ACTIVE with a pre-set password (fast iteration). "
+        "Pair with --email chris+<tag>@ohmgym.com to route activation mail to your inbox.",
+    )
+    parser.add_argument(
         "--group-rule-wait",
         type=int,
         default=GROUP_RULE_WAIT_SECS,
@@ -273,7 +289,18 @@ def main():
     full_name = f"{args.first_name} {args.last_name}"
     started = datetime.now(timezone.utc).isoformat()
 
+    # Warn (don't block) if activation-email flow lacks a routing path
+    if args.use_activation_email and not has_plus_subaddress(login):
+        print(f"WARNING: --use-activation-email is set, but {login} has no '+' subaddress.")
+        print(f"         Activation mail will go to {login}, which has no real mailbox.")
+        print(f"         Continuing — set --email chris+<tag>@ohmgym.com to route to your Gmail.")
+        print()
+
     print(f"Joiner workflow — name={full_name}  login={login}  dept={args.department}")
+    if args.use_activation_email:
+        print("Mode: ACTIVATION EMAIL (STAGED + sendEmail=true)")
+    else:
+        print("Mode: PRE-SET PASSWORD (?activate=true with random password)")
     if args.dry_run:
         print("*** DRY RUN — no writes will be performed ***")
     print()
@@ -321,10 +348,42 @@ def main():
     user_id = ""
     password = ""
     okta_user_created = False
+    activation_email_sent = False
+    activation_url = ""
     if args.dry_run:
-        redacted = {"profile": profile, "credentials": {"password": {"value": "<redacted>"}}}
-        print(f"  [DRY RUN] Would POST /api/v1/users?activate=true:")
-        print(f"  {json.dumps(redacted, indent=2)}")
+        if args.use_activation_email:
+            print(f"  [DRY RUN] Would POST /api/v1/users?activate=false (no credentials):")
+            print(f"  {json.dumps({'profile': profile}, indent=2)}")
+            print(f"  [DRY RUN] Then POST /users/<id>/lifecycle/activate?sendEmail=true")
+            print(f"  [DRY RUN] Activation email would arrive at {login}'s inbox.")
+        else:
+            redacted = {"profile": profile, "credentials": {"password": {"value": "<redacted>"}}}
+            print(f"  [DRY RUN] Would POST /api/v1/users?activate=true:")
+            print(f"  {json.dumps(redacted, indent=2)}")
+    elif args.use_activation_email:
+        status, detail = okta_provision.create_user_staged(okta_session, profile)
+        if status == "created":
+            user_id = detail
+            okta_user_created = True
+            print(f"  Created (STAGED): {login}  id={user_id}")
+        elif status == "exists":
+            print(f"  Skipped (race): {login} — user appeared between pre-flight and POST.")
+        else:
+            print(f"  FAILED: {detail}")
+            sys.exit(3)
+
+        if user_id:
+            print("  Sending activation email...")
+            astatus, adetail = okta_provision.activate_user_with_email(okta_session, user_id)
+            if astatus == "activated":
+                activation_email_sent = True
+                activation_url = adetail
+                print(f"  Activation email sent to {login} (check Gmail at {args.gws_alias_on}).")
+                if activation_url:
+                    print(f"  activationUrl: {activation_url}")
+            else:
+                print(f"  FAILED activation email: {adetail}")
+                sys.exit(3)
     else:
         password = okta_provision.generate_password()
         status, detail = okta_provision.create_user(okta_session, profile, password)
@@ -426,6 +485,7 @@ def main():
         },
         "steps": {
             "okta_user_created": okta_user_created,
+            "okta_activation_email_sent": activation_email_sent,
             "okta_group_assigned": group_assigned,
             "gws_alias_added": alias_result,
             "slack_audit_post": audit_result,
@@ -449,7 +509,10 @@ def main():
         print(f"  Okta id: {user_id}")
     if alias_result == "added":
         print(f"  Activation mail will arrive at {args.gws_alias_on}'s inbox.")
-    if not args.dry_run and org_url:
+    if activation_email_sent:
+        print(f"  Activation email sent — check {args.gws_alias_on}'s Gmail inbox.")
+        print(f"  Click the link in incognito to complete signup as {login}.")
+    elif not args.dry_run and org_url:
         print(f"  Next: open incognito → {org_url} → sign in as {login}")
     print("=" * 60)
 
