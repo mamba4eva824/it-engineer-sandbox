@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Reconcile reports](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 
@@ -111,6 +111,15 @@ The three sides of the JML triangle are all shipped and verified end-to-end agai
 
 All three write structured JSON logs to gitignored `logs/<workflow>-events.jsonl` for replay/forensics. The Sandra Jones arc — Joiner → activation → Leaver — runs in under 2 minutes of automation time end-to-end, with audit-log evidence on both Okta and Slack sides at every step. The full JML design is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md).
 
+### Cross-Platform Audit Trail — Okta Event Hook → AWS Lambda → Slack
+
+Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook (`user.account.update_password`) fires an AWS Lambda Function URL, which posts to `#joiner-it-ops`. The Joiner CLI's welcome-sent post and the Leaver CLI's deactivation post complete the three-event audit trail. End-to-end latency from click to Slack post: **~1 second** including a cold start. ([live trace against Marcus Reyes](public-docs/08-okta-event-hook-lambda.md))
+
+- **First Terraform-managed AWS infrastructure** — `terraform/aws/` ships 10 resources via standard `init / plan / apply`: Lambda + Function URL + execution role + scoped IAM policy + 2 Secrets Manager entries + CloudWatch log group
+- **Least-privilege IAM** — execution role grants `secretsmanager:GetSecretValue` on exactly the two specific secret ARNs the Lambda needs (no wildcards, no broad reads)
+- **Secrets in Secrets Manager, not env vars** — Okta shared secret + Slack bot token both fetched at cold start; rotation is a `tfvars` change with no code redeploy
+- **Slack channels created via API** — `scripts/slack/notify.py:ensure_channel` calls `conversations.create` (idempotent: handles `name_taken` + Enterprise Grid `team_id` requirements), so `#joiner-it-ops` and `#leaver-it-ops` are part of the deploy artifact, not a one-off admin step
+
 ### Email Domain Migration
 
 Migrated 100 Auth0 users from one domain to another via the Management API — updating emails, `user_metadata.manager_email` references, and downstream AWS Identity Store users. ([script details](public-docs/01-auth0-identity-platform.md#email-domain-migration))
@@ -137,7 +146,11 @@ Migrated 100 Auth0 users from one domain to another via the Management API — u
     │           │      │ SCIM ✅          │     │ SCIM ✅ live     │
     │ 3 Perm    │      │ 10 dept OUs     │     │ Audit Logs API  │
     │ Sets      │      │ Per-OU 2SV      │     │ Channel gov.    │
+    │ + Lambda  │      │                 │     │ #joiner-it-ops  │
+    │ event hook│      │                 │     │ #leaver-it-ops  │
     └───────────┘      └────────┬────────┘     └─────────────────┘
+       ▲ Okta event hook → AWS Lambda Function URL → Slack post
+       │ (terraform/aws/ ships 10 resources; first live AWS infra)
                                 │
                     ┌───────────▼───────────────────┐
                     │   Python + MCP Automation      │
@@ -185,6 +198,8 @@ User metadata contract (preserved across Auth0 → Okta): `{ department, role_ti
 | `scripts/okta/apply_slack_saml_overrides.py` | One-purpose CLI that PUTs the four `*Override` SAML fields on the Slack OIN app (the API-only escape hatch documented in `04-okta-migration.md` §"Issue 3") |
 | `scripts/okta/_client.py` | Private Key JWT auth helper (shared by all Okta scripts; same creds as MCP server) |
 | `scripts/slack/_client.py` · `_post.py` · `audit_log_query.py` · `test_connection.py` | Slack API foundation: GET/POST helpers with `{ok:false}` envelope handling, Audit Logs API CLI for SCIM/SAML diagnostics |
+| `scripts/slack/notify.py` | High-level JML notification helpers: `ensure_channel` (create-or-resolve, idempotent, Enterprise-Grid `team_id` aware) + 3 post functions used by joiner/leaver CLIs and the Lambda |
+| `lambdas/okta_activation_handler/handler.py` | AWS Lambda receiving Okta event hooks; verifies Authorization, fetches secrets from Secrets Manager, posts to `#joiner-it-ops` on `user.account.update_password`. Deployed via `terraform/aws/` |
 | `scripts/lifecycle/joiner_workflow.py` | End-to-end Joiner: STAGED + activation email (production-realistic) or pre-set password (fast iteration). Group rules fire → SCIM cascade to GWS+Slack |
 | `scripts/lifecycle/mover_workflow.py` | Department change → Okta attr update → group rules re-fire → GWS OU move + Slack DM/audit |
 | `scripts/lifecycle/leaver_workflow.py` | Offboarding: revoke sessions → Okta deactivate → SCIM DELETE cascade to Slack → GWS suspend (graceful +alias handling). Idempotent. |
@@ -222,6 +237,7 @@ scripts/
     _post.py                       #   POST helpers (chat.postMessage, conversations.open)
     test_connection.py             #   Auth + auditlogs:read smoke test
     audit_log_query.py             #   Slack Enterprise Audit Logs CLI (SCIM/SAML observability)
+    notify.py                      #   ensure_channel + 3 JML post helpers (welcome / activated / leaver); shared by joiner CLI + Lambda
   auth0/                           # Preserved Auth0 Management API automation
     generate_users.py  provision_users.py  update_user_emails.py
     assign_role_permissions.py
@@ -249,10 +265,13 @@ public-docs/
   05-slack-scim-lifecycle.md       # Okta → Slack SCIM lifecycle (provision/deprovision/reactivate)
   06-end-to-end-joiner-demo.md     # Live trace of joiner_workflow.py --use-activation-email
   07-end-to-end-leaver-demo.md     # Live trace of leaver_workflow.py — closes the JML triplet
+  08-okta-event-hook-lambda.md     # Okta event hook → AWS Lambda → Slack #joiner-it-ops; first Terraform AWS infra
   reports/                         # Auto-generated reconcile reports (demoable)
+lambdas/
+  okta_activation_handler/         # Code for the Okta event hook receiver (handler.py + build.sh + requirements.txt)
 terraform/
   auth0/                           # Auth0 tenant-as-code (planned)
-  aws/                             # AWS infrastructure (planned)
+  aws/                             # AWS infrastructure — 10 resources live (Lambda + URL + IAM + Secrets Manager + log group)
 ```
 
 ## Documentation
@@ -268,6 +287,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | Okta → Slack SCIM provisioning/deprovisioning/reactivation proven both directions; UI-vs-CaC dual mechanism; 8-user seat-cap diagnosis from audit logs |
 | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | Live trace of `joiner_workflow.py --use-activation-email`: STAGED user → activation email (Gmail `+` routing) → group rule fire → SCIM cascade to Slack → incognito sign-in. Audit-log evidence on both Okta + Slack sides. |
 | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | Live trace of `leaver_workflow.py` against the same Sandra: sessions revoked → Okta deactivate → SCIM DELETE cascade to Slack in 3 seconds. Idempotent re-run validated. Closes the JML triplet. |
+| [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | First Terraform-managed AWS infrastructure: Okta event hook posts to a Lambda Function URL, which posts to `#joiner-it-ops` when a new hire actually activates. Marcus Reyes trace, CloudWatch evidence, secrets in Secrets Manager, least-privilege IAM. |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 
@@ -279,11 +299,11 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 
 ### Most recent milestone
 
-**Full JML triplet shipped (Joiner + Mover + Leaver), end-to-end against a real persona.** Sandra Jones (Engineering, Frontend Engineer) was created via `joiner_workflow.py --use-activation-email` (STAGED + activation email via Gmail `+` subaddressing), activated through the real Okta welcome flow in incognito, then deactivated via `leaver_workflow.py` with security-critical session-revocation-before-deactivate ordering and SCIM cascade to Slack in 3 seconds. Both flows have full audit-log evidence on Okta + Slack sides. Documented in [`public-docs/06`](public-docs/06-end-to-end-joiner-demo.md) and [`public-docs/07`](public-docs/07-end-to-end-leaver-demo.md).
+**Cross-platform audit trail wired up via Okta Event Hook → AWS Lambda → Slack.** Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook fires a Lambda Function URL, which posts to `#joiner-it-ops`. End-to-end latency from MFA-enrollment-completion to Slack post: ~1 second including a cold start. First Terraform-managed AWS infrastructure in the repo — `terraform/aws/` ships 10 resources via standard `init / plan / apply` (Lambda, Function URL, execution role, scoped IAM policy, Secrets Manager entries, CloudWatch log group). Live trace against Marcus Reyes in [`public-docs/08`](public-docs/08-okta-event-hook-lambda.md).
 
 ### Next up
 
-**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. The JML triplet is functionally complete; Zendesk would extend it with audit-trail-as-tickets (per ADR-004) and agent-seat provisioning. Slack SAML diagnosis remains parked behind HAR capture or Slack Support.
+**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. The JML triplet is functionally complete and now has cross-platform audit-trail coverage; Zendesk would extend it with audit-trail-as-tickets (per ADR-004) and agent-seat provisioning. Slack SAML diagnosis remains parked behind HAR capture or Slack Support.
 
 ### Full phase tracker
 
@@ -293,10 +313,10 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | 2 | Google Workspace Architecture | OU hierarchy, per-OU 2SV + app governance, `reconcile_config.py` | ✅ Complete |
 | 3 | Okta RBAC Foundation | Profile schema, dept groups, group rules, config-as-code pipeline | ✅ Complete |
 | 4 | Okta User Provisioning + Federation | 8 seed users · Okta → GWS SAML (`*Override` pattern) · Okta → AWS deferred | ✅ Complete (AWS deferred) |
-| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, full JML triplet (Joiner/Mover/Leaver) live, **SAML still broken** | 🚧 **Partial (current)** — SCIM + JML ✅, SAML ❌ |
+| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, full JML triplet, **cross-platform Slack audit trail (Okta event hook → AWS Lambda)**, SAML still broken | 🚧 **Partial (current)** — SCIM + JML + audit hook ✅, SAML ❌ |
 | 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned (next up) |
-| 7 | Cross-Platform Identity | `sync_okta_all.py` drift detection across all JML targets | ⏳ Planned |
-| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs, Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; MCP connected |
+| 7 | Cross-Platform Identity | `sync_okta_all.py` drift detection across all JML targets; S3 + DynamoDB remote Terraform state | ⏳ Planned |
+| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs (incl. `terraform plan` gates), Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; **first Terraform infra live** (`terraform/aws/`); MCP connected |
 
 ### How the phases map to the Enterprise SaaS Engineer JD
 
