@@ -78,6 +78,7 @@ okta_client = _load("okta_client", REPO_ROOT / "scripts" / "okta" / "_client.py"
 # resolves against the slack dir on sys.path.
 slack_client = _load("slack_client", REPO_ROOT / "scripts" / "slack" / "_client.py")
 slack_post = _load("slack_post", REPO_ROOT / "scripts" / "slack" / "_post.py")
+slack_notify = _load("slack_notify", REPO_ROOT / "scripts" / "slack" / "notify.py")
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -330,6 +331,27 @@ def main():
         deactivate_result = okta_deactivate_user(okta_session, args.okta_user_id, args.dry_run)
     print()
 
+    # Leaver audit post to #leaver-it-ops, fired immediately after the Okta
+    # deactivation completes. Suppressed on idempotent re-runs to avoid
+    # double-posting; one record per leaver event is the right cardinality.
+    leaver_post = {"skipped": True, "reason": "already_deprovisioned"}
+    if not already_deprovisioned and not args.skip_slack:
+        bot_session = slack_notify.bot_session_if_configured()
+        leaver_post = slack_notify.post_leaver_deactivated(
+            bot_session, full_name, user_login, department, manager_email,
+            dry_run=args.dry_run,
+        )
+        if leaver_post.get("skipped"):
+            print(f"  WARN: #{slack_notify.LEAVER_CHANNEL} leaver post skipped "
+                  f"(reason: {leaver_post.get('reason')})")
+        elif leaver_post.get("dry_run"):
+            print(f"  [DRY RUN] Would post to #{slack_notify.LEAVER_CHANNEL}: "
+                  f"{leaver_post.get('text')}")
+        else:
+            print(f"  Leaver post → #{slack_notify.LEAVER_CHANNEL} "
+                  f"(channel={leaver_post.get('channel')}, ts={leaver_post.get('ts')})")
+        print()
+
     # --- Step 4: GWS suspend ---------------------------------------------
     print("Step 4: GWS — suspend account")
     if args.skip_gws:
@@ -413,6 +435,7 @@ def main():
             "gws_user_suspended": gws_result,
             "slack_scim_cascade_triggered": not already_deprovisioned and not args.dry_run,
             "zendesk_downgraded": zendesk_result,
+            "slack_leaver_post": leaver_post,
             "slack_manager_dm": dm_result,
             "slack_audit_post": audit_result,
         },

@@ -21,6 +21,9 @@ venv/
 *.tfvars
 !*.tfvars.example
 
+# Lambda build artifacts (reproducible from build.sh)
+lambdas/*/build/
+
 # Claude Code
 .claude/
 

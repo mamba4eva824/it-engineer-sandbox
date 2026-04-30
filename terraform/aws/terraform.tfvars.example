@@ -1,0 +1,24 @@
+# Copy this file to terraform.tfvars and fill in the real values.
+# terraform.tfvars is gitignored.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   chmod 600 terraform.tfvars
+#
+# Both secrets below are 64-char hex strings or Slack xoxb tokens — keep them
+# out of any chat or screenshot you share.
+
+# 64-char hex string Okta will send in the Authorization header on every event
+# POST. Generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+okta_webhook_secret = "REPLACE_ME_WITH_64_CHAR_HEX_STRING"
+
+# Slack bot token (xoxb-...) — same value that's currently in .env's SLACK_BOT_TOKEN.
+slack_bot_token = "xoxb-REPLACE_ME"
+
+# Workspace team_id (T-prefix). Defaults to T0AUHDULU9Z (ohmgym sandbox); only
+# change if you point the bot at a different workspace.
+# slack_team_id = "T0AUHDULU9Z"
+
+# Optional overrides — leave commented to use defaults from variables.tf.
+# aws_region          = "us-east-1"
+# name_prefix         = "novatech-okta-hook"
+# joiner_channel_name = "joiner-it-ops"

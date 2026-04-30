@@ -11,11 +11,31 @@
         "@modelcontextprotocol/server-filesystem",
         "./scripts",
         "./terraform",
-        "./docs"
+        "./docs",
+        "./lambdas"
       ]
     },
     "okta": {
       "command": "/Users/christopherweinreich/Documents/Projects/okta-mcp-server/run-okta-mcp.sh"
+    },
+    "terraform": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "hashicorp/terraform-mcp-server:0.5.2"
+      ]
+    },
+    "aws": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-api-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_REGION": "us-east-1",
+        "AWS_API_MCP_PROFILE_NAME": "default"
+      }
     }
   }
 }

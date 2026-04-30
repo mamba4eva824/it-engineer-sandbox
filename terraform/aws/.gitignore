@@ -1,0 +1,19 @@
+# Terraform state files (contain secret values and resource ARNs).
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+
+# .terraform.lock.hcl is intentionally NOT gitignored — committing it pins
+# provider versions across machines (Terraform best practice).
+
+# Variable files holding real values (the *.example version IS committed).
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# Build artifacts (lambdas/*/build/handler.zip is checked in via the lambda code dir,
+# but a stray copy in terraform/ would be wrong).
+*.zip
+plan.bin

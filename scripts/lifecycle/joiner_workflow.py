@@ -92,6 +92,7 @@ okta_provision = _load("okta_provision", REPO_ROOT / "scripts" / "okta" / "provi
 sys.modules.pop("_client", None)
 slack_client = _load("slack_client", REPO_ROOT / "scripts" / "slack" / "_client.py")
 slack_post = _load("slack_post", REPO_ROOT / "scripts" / "slack" / "_post.py")
+slack_notify = _load("slack_notify", REPO_ROOT / "scripts" / "slack" / "notify.py")
 
 load_dotenv(REPO_ROOT / ".env")
 
@@ -384,6 +385,26 @@ def main():
             else:
                 print(f"  FAILED activation email: {adetail}")
                 sys.exit(3)
+
+    # Welcome-sent audit post to #joiner-it-ops, fired immediately after the
+    # activation email is dispatched. Uses the bot token; falls back to a
+    # skipped-with-reason result if the bot can't reach the channel.
+    welcome_post = {"skipped": True, "reason": "no_activation_email"}
+    if activation_email_sent or args.dry_run:
+        bot_session = slack_notify.bot_session_if_configured()
+        welcome_post = slack_notify.post_joiner_welcome_sent(
+            bot_session, full_name, login, args.department, args.role_title,
+            dry_run=args.dry_run,
+        )
+        if welcome_post.get("skipped"):
+            print(f"  WARN: #{slack_notify.JOINER_CHANNEL} welcome post skipped "
+                  f"(reason: {welcome_post.get('reason')})")
+        elif welcome_post.get("dry_run"):
+            print(f"  [DRY RUN] Would post to #{slack_notify.JOINER_CHANNEL}: "
+                  f"{welcome_post.get('text')}")
+        else:
+            print(f"  Welcome post → #{slack_notify.JOINER_CHANNEL} "
+                  f"(channel={welcome_post.get('channel')}, ts={welcome_post.get('ts')})")
     else:
         password = okta_provision.generate_password()
         status, detail = okta_provision.create_user(okta_session, profile, password)
@@ -488,6 +509,7 @@ def main():
             "okta_activation_email_sent": activation_email_sent,
             "okta_group_assigned": group_assigned,
             "gws_alias_added": alias_result,
+            "slack_welcome_post": welcome_post,
             "slack_audit_post": audit_result,
         },
     }
