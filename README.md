@@ -115,9 +115,10 @@ All three write structured JSON logs to gitignored `logs/<workflow>-events.jsonl
 
 Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook (`user.account.update_password`) fires an AWS Lambda Function URL, which posts to `#joiner-it-ops`. The Joiner CLI's welcome-sent post and the Leaver CLI's deactivation post complete the three-event audit trail. End-to-end latency from click to Slack post: **~1 second** including a cold start. ([live trace against Marcus Reyes](public-docs/08-okta-event-hook-lambda.md))
 
-- **First Terraform-managed AWS infrastructure** — `terraform/aws/` ships 10 resources via standard `init / plan / apply`: Lambda + Function URL + execution role + scoped IAM policy + 2 Secrets Manager entries + CloudWatch log group
-- **Least-privilege IAM** — execution role grants `secretsmanager:GetSecretValue` on exactly the two specific secret ARNs the Lambda needs (no wildcards, no broad reads)
-- **Secrets in Secrets Manager, not env vars** — Okta shared secret + Slack bot token both fetched at cold start; rotation is a `tfvars` change with no code redeploy
+- **First Terraform-managed AWS infrastructure** — `terraform/aws/` ships 13 resources via standard `init / plan / apply`: Lambda + Function URL + execution role + scoped IAM policy + 5 Secrets Manager entries + CloudWatch log group
+- **Least-privilege IAM** — execution role grants `secretsmanager:GetSecretValue` on exactly the five specific secret ARNs the Lambda needs (no wildcards, no broad reads)
+- **Secrets in Secrets Manager, not env vars** — Okta webhook secret, Slack bot token, and Okta API JWT credentials all fetched at cold start; rotation is a `tfvars` change with no code redeploy
+- **Server-side dedup** — Lambda calls `GET /api/v1/users/{id}` and skips if `lastLogin` is populated, so subsequent password rotations don't misfire as "new hire activated" posts; skip reasons land in CloudWatch as auditable structured log lines
 - **Slack channels created via API** — `scripts/slack/notify.py:ensure_channel` calls `conversations.create` (idempotent: handles `name_taken` + Enterprise Grid `team_id` requirements), so `#joiner-it-ops` and `#leaver-it-ops` are part of the deploy artifact, not a one-off admin step
 
 ### Email Domain Migration
@@ -299,7 +300,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 
 ### Most recent milestone
 
-**Cross-platform audit trail wired up via Okta Event Hook → AWS Lambda → Slack.** Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook fires a Lambda Function URL, which posts to `#joiner-it-ops`. End-to-end latency from MFA-enrollment-completion to Slack post: ~1 second including a cold start. First Terraform-managed AWS infrastructure in the repo — `terraform/aws/` ships 10 resources via standard `init / plan / apply` (Lambda, Function URL, execution role, scoped IAM policy, Secrets Manager entries, CloudWatch log group). Live trace against Marcus Reyes in [`public-docs/08`](public-docs/08-okta-event-hook-lambda.md).
+**Cross-platform audit trail wired up via Okta Event Hook → AWS Lambda → Slack, with server-side dedup against routine password changes.** Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook fires a Lambda Function URL, which posts to `#joiner-it-ops`. The Lambda dedupes via Okta Management API lookup of `lastLogin` (Private Key JWT auth, same API Services app as the rest of the repo) so a routine password rotation 6 months later doesn't generate a misleading "new hire activated" post. First Terraform-managed AWS infrastructure in the repo — `terraform/aws/` ships 13 resources via standard `init / plan / apply` (Lambda, Function URL, execution role, scoped IAM policy on 5 secret ARNs, 5 Secrets Manager entries, CloudWatch log group). Live trace + dedup verification against Marcus Reyes and Priya Patel in [`public-docs/08`](public-docs/08-okta-event-hook-lambda.md).
 
 ### Next up
 

@@ -37,6 +37,9 @@ data "aws_iam_policy_document" "secrets_read" {
     resources = [
       aws_secretsmanager_secret.okta_webhook_secret.arn,
       aws_secretsmanager_secret.slack_bot_token.arn,
+      aws_secretsmanager_secret.okta_api_client_id.arn,
+      aws_secretsmanager_secret.okta_api_key_id.arn,
+      aws_secretsmanager_secret.okta_api_private_key.arn,
     ]
   }
 }

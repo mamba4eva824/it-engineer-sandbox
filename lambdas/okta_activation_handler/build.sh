@@ -25,10 +25,16 @@ if [[ ! -x "$BUILD_PY" ]]; then
     exit 1
 fi
 
-# Install pinned deps into the package dir (target= keeps them at the zip root).
-# `requests` is pure Python so platform doesn't matter; future native deps would
-# need `--platform manylinux2014_x86_64 --only-binary=:all:` for Lambda x86_64.
-"$BUILD_PY" -m pip install --quiet --target "$BUILD/pkg" -r "$HERE/requirements.txt"
+# Install pinned deps into the package dir, forcing manylinux2014_x86_64
+# wheels so native packages (cryptography, etc.) work on Lambda's x86_64
+# Linux runtime even when the build host is macOS arm64.
+"$BUILD_PY" -m pip install --quiet \
+    --target "$BUILD/pkg" \
+    --platform manylinux2014_x86_64 \
+    --implementation cp \
+    --python-version 3.12 \
+    --only-binary=:all: \
+    -r "$HERE/requirements.txt"
 
 # Drop in the handler.
 cp "$HERE/handler.py" "$BUILD/pkg/handler.py"

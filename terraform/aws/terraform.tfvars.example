@@ -14,6 +14,18 @@ okta_webhook_secret = "REPLACE_ME_WITH_64_CHAR_HEX_STRING"
 # Slack bot token (xoxb-...) — same value that's currently in .env's SLACK_BOT_TOKEN.
 slack_bot_token = "xoxb-REPLACE_ME"
 
+# Okta Management API credentials used by the Lambda's first-activation dedup
+# lookup. Same values as OKTA_ORG_URL / OKTA_CLIENT_ID / OKTA_KEY_ID /
+# OKTA_PRIVATE_KEY in .env (the existing API Services app, shared identity).
+okta_org_url         = "https://your-tenant.okta.com"
+okta_api_client_id   = "0oaXXXXXXXXXXXXXXXXX"
+okta_api_key_id      = "REPLACE_ME"
+okta_api_private_key = <<-EOT
+-----BEGIN PRIVATE KEY-----
+REPLACE_WITH_PEM_LINES
+-----END PRIVATE KEY-----
+EOT
+
 # Workspace team_id (T-prefix). Defaults to T0AUHDULU9Z (ohmgym sandbox); only
 # change if you point the bot at a different workspace.
 # slack_team_id = "T0AUHDULU9Z"

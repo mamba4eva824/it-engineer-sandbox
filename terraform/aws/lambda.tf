@@ -42,11 +42,15 @@ resource "aws_lambda_function" "okta_activation_handler" {
 
   environment {
     variables = {
-      SECRETS_REGION              = var.aws_region
-      OKTA_SECRET_NAME            = aws_secretsmanager_secret.okta_webhook_secret.name
-      SLACK_BOT_TOKEN_SECRET_NAME = aws_secretsmanager_secret.slack_bot_token.name
-      SLACK_TEAM_ID               = var.slack_team_id
-      JOINER_CHANNEL_NAME         = var.joiner_channel_name
+      SECRETS_REGION                   = var.aws_region
+      OKTA_SECRET_NAME                 = aws_secretsmanager_secret.okta_webhook_secret.name
+      SLACK_BOT_TOKEN_SECRET_NAME      = aws_secretsmanager_secret.slack_bot_token.name
+      OKTA_API_CLIENT_ID_SECRET_NAME   = aws_secretsmanager_secret.okta_api_client_id.name
+      OKTA_API_KEY_ID_SECRET_NAME      = aws_secretsmanager_secret.okta_api_key_id.name
+      OKTA_API_PRIVATE_KEY_SECRET_NAME = aws_secretsmanager_secret.okta_api_private_key.name
+      OKTA_ORG_URL                     = var.okta_org_url
+      SLACK_TEAM_ID                    = var.slack_team_id
+      JOINER_CHANNEL_NAME              = var.joiner_channel_name
     }
   }
 

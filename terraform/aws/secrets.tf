@@ -30,3 +30,41 @@ resource "aws_secretsmanager_secret_version" "slack_bot_token" {
   secret_id     = aws_secretsmanager_secret.slack_bot_token.id
   secret_string = var.slack_bot_token
 }
+
+# Three Okta Management API secrets used by the Lambda's first-activation
+# dedup lookup. Same values as the OKTA_CLIENT_ID / OKTA_KEY_ID /
+# OKTA_PRIVATE_KEY entries in .env (the existing API Services app shared by
+# scripts/okta/, the MCP server, and now this Lambda).
+
+resource "aws_secretsmanager_secret" "okta_api_client_id" {
+  name                    = "${var.name_prefix}/okta-api-client-id"
+  description             = "Okta API Services app client id for the dedup lookup."
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "okta_api_client_id" {
+  secret_id     = aws_secretsmanager_secret.okta_api_client_id.id
+  secret_string = var.okta_api_client_id
+}
+
+resource "aws_secretsmanager_secret" "okta_api_key_id" {
+  name                    = "${var.name_prefix}/okta-api-key-id"
+  description             = "Okta API Services app key id (kid) for the dedup lookup."
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "okta_api_key_id" {
+  secret_id     = aws_secretsmanager_secret.okta_api_key_id.id
+  secret_string = var.okta_api_key_id
+}
+
+resource "aws_secretsmanager_secret" "okta_api_private_key" {
+  name                    = "${var.name_prefix}/okta-api-private-key"
+  description             = "PEM-encoded private key for the Okta API Services app."
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "okta_api_private_key" {
+  secret_id     = aws_secretsmanager_secret.okta_api_private_key.id
+  secret_string = var.okta_api_private_key
+}

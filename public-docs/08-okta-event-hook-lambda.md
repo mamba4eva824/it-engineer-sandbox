@@ -52,20 +52,31 @@ Option 3 is also the architecture multiple repo runbooks (`mover-workflow.md`, `
 │       ▼                                                                              │
 │  Lambda: novatech-okta-hook  (Python 3.12, 256 MB, 10 s)                            │
 │       │                                                                              │
-│       ├─► Secrets Manager: GetSecretValue ×2  (Okta secret + Slack bot token)       │
-│       │     └─► IAM execution role with least-privilege inline policy                │
-│       │           granting ONLY GetSecretValue on the two specific ARNs              │
+│       ├─► Secrets Manager: GetSecretValue ×5                                        │
+│       │     • okta-webhook-secret    (Authorization header verification)             │
+│       │     • slack-bot-token         (chat.postMessage auth)                        │
+│       │     • okta-api-client-id     ┐                                              │
+│       │     • okta-api-key-id        ├─ Okta Mgmt API (Private Key JWT) for         │
+│       │     • okta-api-private-key   ┘  the dedup `lastLogin` lookup                 │
+│       │     └─► IAM execution role with least-privilege inline policy:              │
+│       │           GetSecretValue on EXACTLY those 5 ARNs (no wildcards)              │
 │       │                                                                              │
 │       ├─► verify Authorization header == OKTA shared secret                         │
 │       │                                                                              │
 │       ├─► filter data.events[] for eventType == user.account.update_password        │
+│       │                                                                              │
+│       ├─► DEDUP: GET https://<okta>/api/v1/users/{actor.id}                         │
+│       │     └─► if `lastLogin` is null → first activation → post to Slack           │
+│       │     └─► if `lastLogin` is set  → routine password change → silent skip     │
 │       │                                                                              │
 │       ├─► resolve_or_create #joiner-it-ops via conversations.create / list          │
 │       │                                                                              │
 │       ├─► chat.postMessage with Block Kit (login, activated_at, source, status)     │
 │       │                                                                              │
 │       └─► CloudWatch Logs: /aws/lambda/novatech-okta-hook                           │
-│             └─► structured JSON: {"event":"okta_hook_processed","posted":[...]}     │
+│             └─► structured JSON includes the skip reason:                            │
+│                {"event":"okta_hook_processed","posted":[],                          │
+│                 "skipped":[{"login":"...","reason":"not_first_activation:..."}]}    │
 │                                                                                      │
 │  Slack workspace (ohmgym sandbox, T0AUHDULU9Z)                                      │
 │       │                                                                              │
@@ -233,6 +244,52 @@ LEAVER WORKFLOW COMPLETE
 
 End-to-end automation runtime (excluding human MFA enrollment): **~5 seconds**. The Lambda's contribution to that — Okta-click to Slack-post — is **~1 second** including a cold start; warm-path invocations would be ~250ms.
 
+## Dedup verification — Priya Patel (after the Lambda gained `lastLogin` lookup)
+
+After the Marcus run shipped, a real concern surfaced: `user.account.update_password` *also* fires on every subsequent password change. An employee rotating their password 6 months in would generate a misleading "new hire activated Okta" post in `#joiner-it-ops`. The fix was to extend the Lambda with an Okta Management API lookup (Private Key JWT against the existing API Services app) and skip if the user already has a `lastLogin` timestamp.
+
+Verified end-to-end against a fresh persona:
+
+### First activation — post DOES land
+
+```bash
+$ python scripts/lifecycle/joiner_workflow.py \
+    --first-name Priya --last-name Patel \
+    --department Data --role-title "Data Engineer" \
+    --cost-center DAT-100 --manager-email heather.gutierrez@ohmgym.com \
+    --start-date 2026-05-04 --email chris+priya@ohmgym.com \
+    --use-activation-email --skip-gws-alias
+…
+  Created (STAGED): chris+priya@ohmgym.com  id=00u12i65jscqUmdCu698
+  Welcome post → #joiner-it-ops (channel=C0B0N91FHN1, ts=1777570417.163009)
+```
+
+Operator clicks activation email, sets password, enrolls MFA. CloudWatch captures the Lambda firing (truncated for clarity):
+
+```
+{"event": "okta_hook_processed",
+ "posted": [{"login": "chris+priya@ohmgym.com", "ts": "..."}],
+ "skipped": []}
+```
+
+`#joiner-it-ops` gets the activation post — same as Marcus. **Expected behavior; first activation always posts.**
+
+### Subsequent password change — post CORRECTLY SUPPRESSED
+
+Operator stays signed in as Priya, opens Settings → Change Password, sets a new password. Same `user.account.update_password` event fires in Okta. Lambda receives it, calls `GET /api/v1/users/00u12i65jscqUmdCu698`, sees `lastLogin: "2026-04-30T18:00:18.000Z"` (the activation sign-in 10 minutes earlier), and silently skips:
+
+```
+2026-04-30T18:00:30Z  {"event": "okta_hook_processed",
+                       "posted": [],
+                       "skipped": [{"login": "chris+priya@ohmgym.com",
+                                    "reason": "not_first_activation:already_logged_in_at_2026-04-30T18:00:18.000Z"}]}
+2026-04-30T18:00:30Z  REPORT  Duration: 1422.03 ms  Billed: 2246 ms  Init: 823.80 ms
+```
+
+`#joiner-it-ops` is NOT touched. The skip is forensically auditable in CloudWatch — the `reason` field tells you exactly why and references the timestamp that proved the user wasn't activating.
+
+The dedup adds ~1 second to warm-path execution (extra Okta JWT exchange + `GET /users/{id}`); cold-start latency rose modestly because the Lambda zip grew from 1.1 MB to 5.9 MB (PyJWT + cryptography added). Acceptable trade-off; alternative was a misleading audit signal.
+
 ## Decisions worth calling out
 
 ### Why Lambda Function URL instead of API Gateway
@@ -251,20 +308,42 @@ Three reasons:
 - **Auditability:** every secret access is a CloudTrail event tied to a principal.
 - **Rotation:** rotating the secret is a `aws_secretsmanager_secret_version` change with no Lambda redeploy needed (next cold start picks up the new value).
 
-The IAM policy in `iam.tf` grants `GetSecretValue` on **exactly the two ARNs** this Lambda needs — no wildcards. That's the kind of thing the resume bullet "least-privilege IAM across 48 resources" is referring to, applied here at the small scale of this Lambda.
+The IAM policy in `iam.tf` grants `GetSecretValue` on **exactly the five ARNs** this Lambda needs (Okta webhook secret + Slack bot token + 3 Okta Management API credentials) — no wildcards. That's the kind of thing the resume bullet "least-privilege IAM across 48 resources" is referring to, applied here at the small scale of this Lambda.
 
-### Why we only subscribe to `user.account.update_password`
+### Event subscription + dedup with Okta API lookup
 
-Okta emits multiple events around activation:
+Okta emits multiple events around activation. None of them are perfectly clean — every candidate either fires too early (before the user clicks the link) or also fires later in the user's lifecycle. The trade-off matrix from inspecting Marcus Reyes's actual system log:
 
-| Event type | When it fires | Suitable for "user is onboarded"? |
+| Event type | When it fires | Problem for "user is onboarded"? |
 |---|---|---|
-| `user.lifecycle.activate.success` | Activation email *generated* | ❌ fires too early (before click) |
-| `user.account.update_password` | User actually sets password | ✅ |
-| `user.session.start` | Any sign-in (including subsequent ones) | ❌ fires every login, not just activation |
-| `user.mfa.factor.activate` | MFA enrolled | ⚠️ optional; some users skip |
+| `user.lifecycle.activate` | When the joiner CLI POSTs `/lifecycle/activate?sendEmail=true` | Fires ~2 minutes BEFORE the human clicks the email link |
+| `user.account.update_password` | User sets a password | Fires on first activation AND every subsequent password change/rotation/reset |
+| `user.session.start` | Any sign-in | Fires on every login, not just first |
+| `user.mfa.factor.activate` | MFA enrolled | Fires on every MFA factor add, not just first |
+| `user.authentication.verify` | Successful MFA challenge | Fires on every MFA challenge across the user's lifetime |
 
-Subscribing to `update_password` only is the cleanest "they actually did the thing" signal. The Lambda's `WATCHED_EVENT_TYPES` set is a one-line edit if you want to widen this later.
+**Subscribing to `user.account.update_password` plus a server-side dedup is the clean answer.** The handler:
+
+1. Receives every `update_password` event
+2. Reads the user from Okta Management API (`GET /api/v1/users/{id}`)
+3. Inspects the user's `lastLogin` field — null means the user has never signed in, which only happens during the activation flow before they reach the dashboard
+4. Posts to Slack only if `lastLogin` is null; logs a structured skip reason otherwise
+
+A real password rotation 6 months later: same event fires, but `lastLogin` is populated → handler skips with a CloudWatch log line like:
+
+```json
+{"event": "okta_hook_processed", "posted": [],
+ "skipped": [{"login": "chris+priya@ohmgym.com",
+              "reason": "not_first_activation:already_logged_in_at_2026-04-30T18:00:18.000Z"}]}
+```
+
+That skip line is itself the audit evidence — you can grep CloudWatch for `not_first_activation` to count suppressed posts and reason about whether the dedup is doing the right thing in production.
+
+The Lambda's `_is_first_activation()` returns False on Okta API errors too, treating "I can't tell" as "don't post" — false negatives are far less bad than false positives in an audit channel that managers and security read.
+
+### Why JWT-based Okta auth (not a static API token)
+
+The Lambda authenticates to Okta the same way every other script in the repo does: Private Key JWT client-credentials exchange against the existing API Services app (`OKTA_CLIENT_ID` + `OKTA_KEY_ID` + `OKTA_PRIVATE_KEY`). Single principal, single rotation point, same audit trail in Okta's system log. The credentials live in three Secrets Manager entries that the Lambda's execution role can read; the access token is cached in module scope across warm invocations.
 
 ### Why no CloudWatch alarms
 

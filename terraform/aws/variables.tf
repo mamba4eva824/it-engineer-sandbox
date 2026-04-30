@@ -46,6 +46,29 @@ variable "slack_team_id" {
   default     = "T0AUHDULU9Z"
 }
 
+variable "okta_org_url" {
+  description = "Okta tenant base URL, e.g. https://integrator-2367542.okta.com — used by the Lambda's dedup lookup."
+  type        = string
+}
+
+variable "okta_api_client_id" {
+  description = "Client id of the Okta API Services app. Same value as OKTA_CLIENT_ID in .env."
+  type        = string
+  sensitive   = true
+}
+
+variable "okta_api_key_id" {
+  description = "Key id (kid) registered on the Okta API Services app. Same value as OKTA_KEY_ID in .env."
+  type        = string
+  sensitive   = true
+}
+
+variable "okta_api_private_key" {
+  description = "PEM-encoded private key matching okta_api_key_id. Same value as OKTA_PRIVATE_KEY in .env."
+  type        = string
+  sensitive   = true
+}
+
 variable "joiner_channel_name" {
   description = "Slack public channel the activation message posts to."
   type        = string
