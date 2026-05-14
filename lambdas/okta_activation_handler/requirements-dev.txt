@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==8.3.4
+pytest-mock==3.14.0
+requests-mock==1.12.1
+moto[secretsmanager]==5.0.16
