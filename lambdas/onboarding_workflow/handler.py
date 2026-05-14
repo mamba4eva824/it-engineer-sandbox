@@ -28,7 +28,7 @@ the ohmgym-onboarding-logs table.
 # DUPLICATED IN: lambdas/okta_activation_handler/handler.py
 #   The JWT exchange, secret-cache, Slack post, and channel resolution
 #   helpers are intentionally inlined here rather than shared via a Lambda
-#   Layer — see public-docs/09-ohmgym-onboarding-workflow.md trade-offs.
+#   Layer — see public-docs/10-aws-scheduled-onboarding-workflow.md trade-offs.
 
 import json
 import os

@@ -57,7 +57,7 @@ All three scripts honor the project `.env` for Okta credentials (Private Key JWT
 
 ## Companion docs
 
-- [`public-docs/09-ohmgym-onboarding-workflow.md`](../../public-docs/09-ohmgym-onboarding-workflow.md) — end-to-end runbook + architecture
+- [`public-docs/10-aws-scheduled-onboarding-workflow.md`](../../public-docs/10-aws-scheduled-onboarding-workflow.md) — end-to-end runbook + architecture
 - [`public-docs/08-okta-event-hook-lambda.md`](../../public-docs/08-okta-event-hook-lambda.md) — the reactive companion Lambda
 - [`lambdas/onboarding_workflow/handler.py`](../../lambdas/onboarding_workflow/handler.py) — what the Lambda actually does
 - [`terraform/aws-onboarding/`](../../terraform/aws-onboarding/) — the us-west-1 stack

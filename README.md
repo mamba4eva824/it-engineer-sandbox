@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [Reconcile reports](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 
@@ -267,6 +267,7 @@ public-docs/
   06-end-to-end-joiner-demo.md     # Live trace of joiner_workflow.py --use-activation-email
   07-end-to-end-leaver-demo.md     # Live trace of leaver_workflow.py — closes the JML triplet
   08-okta-event-hook-lambda.md     # Okta event hook → AWS Lambda → Slack #joiner-it-ops; first Terraform AWS infra
+  10-aws-scheduled-onboarding-workflow.md  # EventBridge Scheduler → Lambda → Okta + Slack; 9am PT daily; us-west-1
   reports/                         # Auto-generated reconcile reports (demoable)
 lambdas/
   okta_activation_handler/         # Code for the Okta event hook receiver (handler.py + build.sh + requirements.txt)
@@ -289,6 +290,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | Live trace of `joiner_workflow.py --use-activation-email`: STAGED user → activation email (Gmail `+` routing) → group rule fire → SCIM cascade to Slack → incognito sign-in. Audit-log evidence on both Okta + Slack sides. |
 | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | Live trace of `leaver_workflow.py` against the same Sandra: sessions revoked → Okta deactivate → SCIM DELETE cascade to Slack in 3 seconds. Idempotent re-run validated. Closes the JML triplet. |
 | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | First Terraform-managed AWS infrastructure: Okta event hook posts to a Lambda Function URL, which posts to `#joiner-it-ops` when a new hire actually activates. Marcus Reyes trace, CloudWatch evidence, secrets in Secrets Manager, least-privilege IAM. |
+| [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | Second Terraform-managed AWS stack (us-west-1, isolated): EventBridge Scheduler → Lambda → Okta `search`-filter activate POST → DynamoDB audit row → Slack batch summary. 9am PT daily. Cross-region Secrets Manager replicas. 11 pytest cases + GitHub Actions CI. |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 
