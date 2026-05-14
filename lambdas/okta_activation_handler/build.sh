@@ -16,12 +16,24 @@ ZIP="$BUILD/handler.zip"
 rm -rf "$BUILD"
 mkdir -p "$BUILD/pkg"
 
-# Pick a python with pip. The project's .venv ships without pip, so prefer the
-# system 3.12 framework python (matches the Lambda runtime). Override by
-# setting BUILD_PY to a different interpreter if needed.
-BUILD_PY="${BUILD_PY:-/Library/Frameworks/Python.framework/Versions/3.12/bin/python3}"
+# Pick a python 3.12 with pip. On macOS the project default is the system
+# framework install (matches the Lambda runtime); on CI Linux we fall back to
+# whatever `python3` is on PATH (the workflow sets up python 3.12 explicitly).
+# Override either default by setting BUILD_PY.
+if [[ -z "${BUILD_PY:-}" ]]; then
+    if [[ -x "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" ]]; then
+        BUILD_PY="/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
+    elif command -v python3.12 >/dev/null 2>&1; then
+        BUILD_PY="$(command -v python3.12)"
+    elif command -v python3 >/dev/null 2>&1; then
+        BUILD_PY="$(command -v python3)"
+    else
+        echo "ERROR: no python3 found on PATH. Set BUILD_PY=/path/to/python3." >&2
+        exit 1
+    fi
+fi
 if [[ ! -x "$BUILD_PY" ]]; then
-    echo "ERROR: $BUILD_PY not found. Set BUILD_PY=/path/to/python3 with pip available." >&2
+    echo "ERROR: BUILD_PY=$BUILD_PY is not executable." >&2
     exit 1
 fi
 
