@@ -227,10 +227,19 @@ def _build_activation_message(login: str, full_name: str, event_time: str) -> tu
 def _handle_event_post(event_payload: dict) -> dict:
     """Walk data.events[], dispatch a Slack post for each matching activation event.
 
-    For each matching event, looks up the user via Okta API and only posts if
-    `lastLogin` is empty — that's the first-activation signal. Subsequent
-    password changes are skipped silently with a structured log line so the
-    skip is auditable in CloudWatch.
+    Three filters, in order:
+      1. eventType must be in WATCHED_EVENT_TYPES (skip non-password events).
+      2. outcome.result must NOT be "FAILURE" — Okta emits an event for every
+         password attempt during activation, including ones that fail the
+         password policy. Each FAILURE event has the same eventType +
+         identical actor as the eventual SUCCESS, so without this filter a
+         hire who fat-fingers their first password gets a duplicate
+         "✅ activated" post in #joiner-it-ops. Verified end-to-end with
+         Priya Patel 2026-05-14 (FAILURE at 20:57:52.706Z, SUCCESS at
+         20:57:55.912Z).
+      3. lastLogin must be empty — that's the first-activation signal.
+         Subsequent routine password rotations are skipped silently with a
+         structured log line so the skip is auditable in CloudWatch.
     """
     events = event_payload.get("data", {}).get("events", []) or []
     posted = []
@@ -239,6 +248,16 @@ def _handle_event_post(event_payload: dict) -> dict:
         evtype = ev.get("eventType", "")
         if evtype not in WATCHED_EVENT_TYPES:
             skipped.append({"eventType": evtype, "reason": "not_watched"})
+            continue
+
+        outcome = (ev.get("outcome") or {}).get("result", "")
+        if outcome == "FAILURE":
+            actor_for_log = ev.get("actor", {}) or {}
+            skipped.append({
+                "eventType": evtype,
+                "login": actor_for_log.get("alternateId", "(unknown)"),
+                "reason": "outcome_failure",
+            })
             continue
 
         actor = ev.get("actor", {}) or {}
