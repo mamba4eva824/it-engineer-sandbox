@@ -208,6 +208,103 @@ def post_leaver_deactivated(
     return {"skipped": False, "channel": channel_id, "ts": ts, "text": text}
 
 
+def _build_batch_summary_blocks(
+    run_date: str,
+    activated: list[dict],
+    errors: list[dict],
+    skipped: list[dict] | None = None,
+    batch_run_id: str = "",
+) -> tuple[str, list]:
+    """Block Kit payload for the daily onboarding batch summary.
+
+    DUPLICATED IN: lambdas/onboarding_workflow/handler.py:_build_batch_summary_blocks
+    Keep the two in sync — the Lambda can't import this module cleanly.
+    """
+    n_act = len(activated)
+    n_err = len(errors)
+    text = f":rocket: Daily joiner activations — {run_date}: {n_act} activated, {n_err} errors"
+
+    blocks: list[dict] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"🚀 Daily joiner activations — {run_date}"},
+        }
+    ]
+
+    if activated:
+        lines = [
+            f"• {u.get('first_name', '')} {u.get('last_name', '')}".strip()
+            + (f" — {u['role_title']}, {u['department']}" if u.get("role_title") or u.get("department") else "")
+            + f" ({u.get('login', '')})"
+            for u in activated
+        ]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Activated ({n_act}):*\n" + "\n".join(lines)},
+        })
+    else:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Activated (0):*\n_No STAGED users with today's startDate._"},
+        })
+
+    if errors:
+        err_lines = [f"• `{e.get('login', '?')}` — {e.get('error', '?')}" for e in errors]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Errors ({n_err}):*\n" + "\n".join(err_lines)},
+        })
+
+    if skipped:
+        skip_lines = [f"• `{s.get('login', '?')}` — {s.get('reason', '?')}" for s in skipped]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Skipped ({len(skipped)}):*\n" + "\n".join(skip_lines)},
+        })
+
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {"type": "mrkdwn", "text": f"batch_run_id: `{batch_run_id}` • run_date_pt: `{run_date}` • Posted by NovaTech IT Ops automation"},
+        ],
+    })
+    return text, blocks
+
+
+def post_joiner_batch_summary(
+    bot_session,
+    run_date: str,
+    activated: list[dict],
+    errors: list[dict],
+    *,
+    skipped: list[dict] | None = None,
+    batch_run_id: str = "",
+    dry_run: bool = False,
+    channel_name: str = JOINER_CHANNEL,
+) -> dict:
+    """Post the daily onboarding-batch summary to #joiner-it-ops.
+
+    Mirrors the Lambda's _build_batch_summary_blocks payload so the CLI
+    smoke test exercises the exact same Block Kit shape that the Lambda
+    will produce in production.
+
+    `activated` entries: {"login", "first_name", "last_name", "department",
+    "role_title", "user_id"} (any missing key defaults to "").
+    `errors` entries: {"login", "error"}.
+    """
+    text, blocks = _build_batch_summary_blocks(run_date, activated, errors, skipped, batch_run_id)
+    if dry_run:
+        return {"skipped": False, "dry_run": True, "channel_name": channel_name, "text": text, "blocks": blocks}
+    if bot_session is None:
+        return {"skipped": True, "reason": "no_bot_token"}
+    try:
+        channel_id = ensure_channel(bot_session, channel_name)
+        ts = post_message(bot_session, channel_id, text, blocks=blocks)
+    except SlackAPIError as e:
+        return {"skipped": True, "reason": e.error}
+    return {"skipped": False, "channel": channel_id, "ts": ts, "text": text}
+
+
 # --------------------------------------------------------------------------
 # CLI smoke test
 # --------------------------------------------------------------------------
@@ -242,9 +339,40 @@ if __name__ == "__main__":
     print(json.dumps(r, indent=2))
     print()
 
-    print("Smoke test 3/3: post_leaver_deactivated → #leaver-it-ops")
+    print("Smoke test 3/4: post_leaver_deactivated → #leaver-it-ops")
     r = post_leaver_deactivated(
         bot, "Smoke Test Leaver", "smoke.leaver@ohmgym.com",
         "Engineering", "manager@ohmgym.com",
+    )
+    print(json.dumps(r, indent=2))
+    print()
+
+    print("Smoke test 4/4: post_joiner_batch_summary → #joiner-it-ops")
+    import uuid
+    r = post_joiner_batch_summary(
+        bot,
+        run_date="2026-05-14",
+        activated=[
+            {
+                "user_id": "00usmoke1",
+                "login": "smoke.priya@ohmgym.com",
+                "first_name": "Smoke",
+                "last_name": "Priya",
+                "department": "Data",
+                "role_title": "Data Engineer",
+            },
+            {
+                "user_id": "00usmoke2",
+                "login": "smoke.marcus@ohmgym.com",
+                "first_name": "Smoke",
+                "last_name": "Marcus",
+                "department": "Data",
+                "role_title": "Data Analyst",
+            },
+        ],
+        errors=[
+            {"login": "smoke.error@ohmgym.com", "error": "E0000001: Bad request"},
+        ],
+        batch_run_id=uuid.uuid4().hex,
     )
     print(json.dumps(r, indent=2))
