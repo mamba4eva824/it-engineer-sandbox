@@ -1,0 +1,157 @@
+name: onboarding-workflow CI
+
+# Validates the onboarding_workflow Lambda + its Terraform on:
+#   - every push to the dedicated feature branch (catches regressions during dev)
+#   - every PR back to main (gates the merge)
+#
+# Deliberately NOT triggered on push to main: after merge, the work is done.
+# The actual deploy (`terraform apply`) is operator-gated and never in CI,
+# so a main-push CI run would only re-verify what the PR check already
+# confirmed.
+#
+# What this workflow enforces:
+#   ✓ Python tests (pytest, 11 cases, ~1s) — must pass on every push
+#   ✓ Lambda zip build — must produce build/handler.zip
+#   ✓ Terraform fmt + validate for both `terraform/aws/` and
+#     `terraform/aws-onboarding/` — must be clean
+#   ✓ py_compile on every Python file in scope
+#
+# What is deliberately NOT enforced here:
+#   ✗ `terraform plan` — requires AWS OIDC creds. Adding it is a follow-up
+#     (Phase 8: CI/CD for IaC). For now, plan is a local-laptop step.
+#   ✗ `terraform apply` — never runs in CI. Apply is always operator-gated.
+#   ✗ `aws lambda invoke` — never runs in CI. Real invokes are operator-only.
+
+on:
+  push:
+    branches:
+      - feature/ohmgym-onboarding-workflow
+    paths:
+      - 'lambdas/onboarding_workflow/**'
+      - 'terraform/aws-onboarding/**'
+      - 'terraform/aws/secrets.tf'
+      - 'terraform/aws/outputs.tf'
+      - 'scripts/onboarding/**'
+      - 'scripts/slack/notify.py'
+      - '.github/workflows/onboarding-workflow-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lambdas/onboarding_workflow/**'
+      - 'terraform/aws-onboarding/**'
+      - 'terraform/aws/secrets.tf'
+      - 'terraform/aws/outputs.tf'
+      - 'scripts/onboarding/**'
+      - 'scripts/slack/notify.py'
+      - '.github/workflows/onboarding-workflow-ci.yml'
+
+# Cancel older in-flight runs on the same branch when a new push arrives.
+concurrency:
+  group: onboarding-workflow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: pytest (handler.py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: lambdas/onboarding_workflow/requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r lambdas/onboarding_workflow/requirements-dev.txt
+
+      - name: Run pytest
+        run: pytest lambdas/onboarding_workflow/tests -v
+
+  build-zip:
+    name: build Lambda zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build handler.zip
+        run: bash lambdas/onboarding_workflow/build.sh
+
+      - name: Confirm artifact exists
+        run: |
+          test -f lambdas/onboarding_workflow/build/handler.zip
+          ls -lh lambdas/onboarding_workflow/build/handler.zip
+
+  terraform-validate:
+    name: terraform fmt + validate (${{ matrix.stack }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - terraform/aws
+          - terraform/aws-onboarding
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+
+      - name: Set up Python 3.12 (for build.sh)
+        if: matrix.stack == 'terraform/aws-onboarding'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # The aws-onboarding stack reads the Lambda zip via local_file at plan
+      # time, so build it first when validating that stack.
+      - name: Build Lambda zip
+        if: matrix.stack == 'terraform/aws-onboarding'
+        run: bash lambdas/onboarding_workflow/build.sh
+
+      - name: terraform fmt -check
+        working-directory: ${{ matrix.stack }}
+        run: terraform fmt -check -recursive
+
+      - name: terraform init (no backend)
+        working-directory: ${{ matrix.stack }}
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        working-directory: ${{ matrix.stack }}
+        run: terraform validate -no-color
+
+  python-syntax:
+    name: py_compile (handler + scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Syntax-check Lambda handler
+        run: python -m py_compile lambdas/onboarding_workflow/handler.py
+
+      - name: Syntax-check CLI helpers
+        run: |
+          python -m py_compile scripts/onboarding/seed_staged_user.py
+          python -m py_compile scripts/onboarding/invoke_onboarding_workflow.py
+          python -m py_compile scripts/onboarding/replay_batch_activation.py
+
+      - name: Syntax-check notify.py
+        run: python -m py_compile scripts/slack/notify.py
