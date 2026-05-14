@@ -24,6 +24,12 @@ resource "aws_secretsmanager_secret" "slack_bot_token" {
   name                    = "${var.name_prefix}/slack-bot-token"
   description             = "Slack xoxb- bot token used by the Lambda to post to #joiner-it-ops."
   recovery_window_in_days = 0
+
+  # Replicated to us-west-1 for the ohmgym-onboarding-workflow Lambda (Phase 6).
+  # Rotation here auto-propagates; the replica Lambda reads a local-region ARN.
+  replica {
+    region = "us-west-1"
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "slack_bot_token" {
@@ -40,6 +46,10 @@ resource "aws_secretsmanager_secret" "okta_api_client_id" {
   name                    = "${var.name_prefix}/okta-api-client-id"
   description             = "Okta API Services app client id for the dedup lookup."
   recovery_window_in_days = 0
+
+  replica {
+    region = "us-west-1"
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "okta_api_client_id" {
@@ -51,6 +61,10 @@ resource "aws_secretsmanager_secret" "okta_api_key_id" {
   name                    = "${var.name_prefix}/okta-api-key-id"
   description             = "Okta API Services app key id (kid) for the dedup lookup."
   recovery_window_in_days = 0
+
+  replica {
+    region = "us-west-1"
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "okta_api_key_id" {
@@ -62,6 +76,10 @@ resource "aws_secretsmanager_secret" "okta_api_private_key" {
   name                    = "${var.name_prefix}/okta-api-private-key"
   description             = "PEM-encoded private key for the Okta API Services app."
   recovery_window_in_days = 0
+
+  replica {
+    region = "us-west-1"
+  }
 }
 
 resource "aws_secretsmanager_secret_version" "okta_api_private_key" {
