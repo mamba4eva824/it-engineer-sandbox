@@ -1,0 +1,99 @@
+name: offboarding-workflow CI
+
+on:
+  push:
+    branches:
+      - feature/ohmgym-offboarding-workflow
+      - main
+    paths:
+      - 'lambdas/offboarding_workflow/**'
+      - 'terraform/aws-offboarding/**'
+      - 'scripts/offboarding/**'
+      - 'scripts/slack/notify.py'
+      - '.github/workflows/offboarding-workflow-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lambdas/offboarding_workflow/**'
+      - 'terraform/aws-offboarding/**'
+      - 'scripts/offboarding/**'
+      - 'scripts/slack/notify.py'
+      - '.github/workflows/offboarding-workflow-ci.yml'
+
+concurrency:
+  group: offboarding-workflow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-tests:
+    name: pytest (handler.py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: lambdas/offboarding_workflow/requirements-dev.txt
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r lambdas/offboarding_workflow/requirements-dev.txt
+      - run: pytest lambdas/offboarding_workflow/tests -v
+
+  build-zip:
+    name: build Lambda zip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: bash lambdas/offboarding_workflow/build.sh
+      - run: test -f lambdas/offboarding_workflow/build/handler.zip
+
+  terraform-validate:
+    name: terraform fmt + validate (${{ matrix.stack }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - terraform/aws-onboarding
+          - terraform/aws-offboarding
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+      - uses: actions/setup-python@v5
+        if: contains(matrix.stack, 'offboarding') || matrix.stack == 'terraform/aws-onboarding'
+        with:
+          python-version: '3.12'
+      - name: Build offboarding Lambda zip
+        if: matrix.stack == 'terraform/aws-offboarding'
+        run: bash lambdas/offboarding_workflow/build.sh
+      - name: Build onboarding Lambda zip
+        if: matrix.stack == 'terraform/aws-onboarding'
+        run: bash lambdas/onboarding_workflow/build.sh
+      - working-directory: ${{ matrix.stack }}
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false
+          terraform validate -no-color
+
+  python-syntax:
+    name: py_compile (handler + scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m py_compile lambdas/offboarding_workflow/handler.py
+          python -m py_compile scripts/offboarding/set_end_date.py
+          python -m py_compile scripts/offboarding/invoke_offboarding_workflow.py
+          python -m py_compile scripts/offboarding/replay_batch_deactivation.py
+          python -m py_compile scripts/offboarding/seed_active_user.py
+          python -m py_compile scripts/slack/notify.py

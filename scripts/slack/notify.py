@@ -305,6 +305,95 @@ def post_joiner_batch_summary(
     return {"skipped": False, "channel": channel_id, "ts": ts, "text": text}
 
 
+def _build_leaver_batch_summary_blocks(
+    run_date: str,
+    deactivated: list[dict],
+    errors: list[dict],
+    skipped: list[dict] | None = None,
+    batch_run_id: str = "",
+) -> tuple[str, list]:
+    """Block Kit payload for the daily offboarding batch summary.
+
+    DUPLICATED IN: lambdas/offboarding_workflow/handler.py:_build_batch_summary_blocks
+    """
+    n_act = len(deactivated)
+    n_err = len(errors)
+    text = f":no_entry: Daily leaver deactivations — {run_date}: {n_act} deactivated, {n_err} errors"
+
+    blocks: list[dict] = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"🚪 Daily leaver deactivations — {run_date}"},
+        }
+    ]
+
+    if deactivated:
+        lines = [
+            f"• {u.get('first_name', '')} {u.get('last_name', '')}".strip()
+            + (f" — {u['role_title']}, {u['department']}" if u.get("role_title") or u.get("department") else "")
+            + f" ({u.get('login', '')})"
+            for u in deactivated
+        ]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Deactivated ({n_act}):*\n" + "\n".join(lines)},
+        })
+    else:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "*Deactivated (0):*\n_No ACTIVE users with today's endDate._"},
+        })
+
+    if errors:
+        err_lines = [f"• `{e.get('login', '?')}` — {e.get('error', '?')}" for e in errors]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Errors ({n_err}):*\n" + "\n".join(err_lines)},
+        })
+
+    if skipped:
+        skip_lines = [f"• `{s.get('login', '?')}` — {s.get('reason', '?')}" for s in skipped]
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Skipped ({len(skipped)}):*\n" + "\n".join(skip_lines)},
+        })
+
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {"type": "mrkdwn", "text": f"batch_run_id: `{batch_run_id}` • run_date_pt: `{run_date}` • Posted by NovaTech IT Ops automation"},
+        ],
+    })
+    return text, blocks
+
+
+def post_leaver_batch_summary(
+    bot_session,
+    run_date: str,
+    deactivated: list[dict],
+    errors: list[dict],
+    *,
+    skipped: list[dict] | None = None,
+    batch_run_id: str = "",
+    dry_run: bool = False,
+    channel_name: str = LEAVER_CHANNEL,
+) -> dict:
+    """Post the daily offboarding-batch summary to #leaver-it-ops."""
+    text, blocks = _build_leaver_batch_summary_blocks(
+        run_date, deactivated, errors, skipped, batch_run_id,
+    )
+    if dry_run:
+        return {"skipped": False, "dry_run": True, "channel_name": channel_name, "text": text, "blocks": blocks}
+    if bot_session is None:
+        return {"skipped": True, "reason": "no_bot_token"}
+    try:
+        channel_id = ensure_channel(bot_session, channel_name)
+        ts = post_message(bot_session, channel_id, text, blocks=blocks)
+    except SlackAPIError as e:
+        return {"skipped": True, "reason": e.error}
+    return {"skipped": False, "channel": channel_id, "ts": ts, "text": text}
+
+
 # --------------------------------------------------------------------------
 # CLI smoke test
 # --------------------------------------------------------------------------

@@ -1,0 +1,8 @@
+# Local Terraform state + lock files. Phase 7 will move to S3 + DynamoDB remote.
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Real values (replica ARNs + alarm email). Committed template is .tfvars.example.
+terraform.tfvars

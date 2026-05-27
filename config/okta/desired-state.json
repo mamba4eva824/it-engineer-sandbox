@@ -51,6 +51,21 @@
           "action": "READ_ONLY"
         }
       ]
+    },
+    {
+      "variableName": "endDate",
+      "title": "End Date",
+      "type": "string",
+      "required": false,
+      "description": "ISO date (YYYY-MM-DD). Last employment day; scheduled offboarding runs on this date (America/Los_Angeles).",
+      "enum": null,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "permissions": [
+        {
+          "principal": "SELF",
+          "action": "READ_ONLY"
+        }
+      ]
     }
   ],
   "groups": [
@@ -228,6 +243,14 @@
       "groups": [
         "Engineering",
         "access-gws"
+      ]
+    },
+    {
+      "appLabel": "Slack",
+      "groups": [
+        "Data",
+        "Engineering",
+        "Product"
       ]
     }
   ]

@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+#
+# The four *_replica_arn values come from the us-east-1 stack's outputs
+# after you run `terraform -chdir=../aws apply`:
+#
+#   $ terraform -chdir=../aws output slack_bot_token_replica_arn_us_west_1
+#   $ terraform -chdir=../aws output okta_api_client_id_replica_arn_us_west_1
+#   $ terraform -chdir=../aws output okta_api_key_id_replica_arn_us_west_1
+#   $ terraform -chdir=../aws output okta_api_private_key_replica_arn_us_west_1
+#
+# okta_org_url is the same as the OKTA_ORG_URL in .env.
+
+slack_bot_token_replica_arn      = "arn:aws:secretsmanager:us-west-1:430118826061:secret:novatech-okta-hook/slack-bot-token-XXXXXX"
+okta_api_client_id_replica_arn   = "arn:aws:secretsmanager:us-west-1:430118826061:secret:novatech-okta-hook/okta-api-client-id-XXXXXX"
+okta_api_key_id_replica_arn      = "arn:aws:secretsmanager:us-west-1:430118826061:secret:novatech-okta-hook/okta-api-key-id-XXXXXX"
+okta_api_private_key_replica_arn = "arn:aws:secretsmanager:us-west-1:430118826061:secret:novatech-okta-hook/okta-api-private-key-XXXXXX"
+
+okta_org_url = "https://integrator-2367542.okta.com"
+
+# Email that gets paged on Lambda errors. AWS sends a one-time SNS
+# confirmation link on first apply — click it.
+alarm_email = "ops@example.com"

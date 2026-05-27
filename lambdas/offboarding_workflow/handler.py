@@ -1,34 +1,29 @@
-"""AWS Lambda handler for the ohmgym onboarding workflow.
+"""AWS Lambda handler for the ohmgym offboarding workflow.
 
-Invoked by EventBridge Scheduler at 09:00 America/Los_Angeles daily. On each
+Invoked by EventBridge Scheduler at 17:00 America/Los_Angeles daily. On each
 invocation:
 
   1. Compute today_pt (overridable via event["override_date"] for replays).
   2. Query Okta Management API for users matching
-       status eq "STAGED" and profile.startDate eq "<today_pt>"
+       status eq "ACTIVE" and profile.endDate eq "<today_pt>"
      via the server-side `search` filter.
   3. For each matched user:
        a. DynamoDB GetItem on (run_date, user_id) — skip if already success.
-       b. POST /api/v1/users/{id}/lifecycle/activate?sendEmail=true to Okta.
-       c. DynamoDB PutItem with the full identity snapshot + outcome.
-  4. Post one batch-summary Block Kit message to #joiner-it-ops.
+       b. DELETE /api/v1/users/{id}/sessions (security-critical, before deactivate).
+       c. POST /api/v1/users/{id}/lifecycle/deactivate to Okta.
+       d. DynamoDB PutItem with the full identity snapshot + outcome.
+  4. Post one batch-summary Block Kit message to #leaver-it-ops.
   5. Emit structured JSON to CloudWatch Logs for each user + the final summary.
 
-This is the PROACTIVE half of the JML pipeline. The existing us-east-1
-novatech-okta-hook Lambda is the REACTIVE half (per-user posts when each
-hire clicks their activation link later in the day).
+This is the PROACTIVE leaver half of the JML pipeline. SCIM cascades Slack
+(and GWS for real SCIM users) without code in this Lambda.
 
 Secrets are pulled from AWS Secrets Manager (us-west-1 replicas) at module
-load and cached for cold-start amortization across reused executions. The
-execution role is scoped (in terraform/aws-onboarding/iam.tf) to
-GetSecretValue on exactly the 4 replica ARNs and GetItem/PutItem on exactly
-the ohmgym-onboarding-logs table.
+load and cached for cold-start amortization across reused executions.
 """
 
-# DUPLICATED IN: lambdas/okta_activation_handler/handler.py
-#   The JWT exchange, secret-cache, Slack post, and channel resolution
-#   helpers are intentionally inlined here rather than shared via a Lambda
-#   Layer — see public-docs/10-aws-scheduled-onboarding-workflow.md trade-offs.
+# DUPLICATED IN: lambdas/onboarding_workflow/handler.py, scripts/slack/notify.py
+#   JWT exchange, secret-cache, Slack post, and channel resolution helpers.
 
 import json
 import os
@@ -52,8 +47,8 @@ OKTA_ORG_URL = os.environ["OKTA_ORG_URL"].rstrip("/")
 DYNAMODB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
 DYNAMODB_TTL_DAYS = int(os.environ.get("DYNAMODB_TTL_DAYS", "90"))
 SLACK_TEAM_ID = os.environ.get("SLACK_TEAM_ID", "")
-JOINER_CHANNEL_NAME = os.environ.get("JOINER_CHANNEL_NAME", "joiner-it-ops")
-ACTIVATE_PACE_SECONDS = float(os.environ.get("ACTIVATE_PACE_SECONDS", "0.2"))
+LEAVER_CHANNEL_NAME = os.environ.get("LEAVER_CHANNEL_NAME", "leaver-it-ops")
+DEACTIVATE_PACE_SECONDS = float(os.environ.get("DEACTIVATE_PACE_SECONDS", "0.2"))
 
 _PT = ZoneInfo("America/Los_Angeles")
 
@@ -71,21 +66,17 @@ _OKTA_API_CLIENT_ID = _fetch_secret(OKTA_API_CLIENT_ID_SECRET_NAME)
 _OKTA_API_PRIVATE_KEY = _fetch_secret(OKTA_API_PRIVATE_KEY_SECRET_NAME)
 _OKTA_API_KEY_ID = _fetch_secret(OKTA_API_KEY_ID_SECRET_NAME)
 
-# Cached access token across warm invocations.
 _okta_token_cache: dict = {"token": None, "expires_at": 0}
 
 
 def _today_pt(override: str | None) -> str:
-    """Return YYYY-MM-DD in America/Los_Angeles, honoring an override."""
     if override:
-        # Validate by round-tripping through fromisoformat — raises on bad input.
         datetime.fromisoformat(override)
         return override
     return datetime.now(_PT).date().isoformat()
 
 
 def _okta_access_token() -> str:
-    """Return a valid Okta API access token, exchanging a JWT if needed."""
     now = int(time.time())
     if _okta_token_cache["token"] and _okta_token_cache["expires_at"] - 60 > now:
         return _okta_token_cache["token"]
@@ -129,17 +120,11 @@ def _okta_access_token() -> str:
     return body["access_token"]
 
 
-def _search_staged_users(today_pt: str) -> list[dict]:
-    """Server-side filter Okta users by STAGED or DEPROVISIONED + today's startDate.
-
-    DEPROVISIONED is included so leaver-round-trip demos can re-run the joiner
-    batch after scripts/offboarding/restage_for_onboarding.py resets startDate.
-    Okta activate accepts both STAGED and DEPROVISIONED per lifecycle API docs.
-    """
+def _search_active_leavers(today_pt: str) -> list[dict]:
     token = _okta_access_token()
     search = (
-        f'(status eq "STAGED" or status eq "DEPROVISIONED") '
-        f'and profile.startDate eq "{today_pt}"'
+        f'(status eq "ACTIVE" or status eq "PROVISIONED") '
+        f'and profile.endDate eq "{today_pt}"'
     )
     resp = requests.get(
         f"{OKTA_ORG_URL}/api/v1/users",
@@ -154,8 +139,7 @@ def _search_staged_users(today_pt: str) -> list[dict]:
     return resp.json() or []
 
 
-def _already_activated_today(run_date: str, user_id: str) -> bool:
-    """Idempotency guard. True if a success row already exists for today."""
+def _already_deactivated_today(run_date: str, user_id: str) -> bool:
     resp = _table.get_item(
         Key={"run_date": run_date, "user_id": user_id},
         ConsistentRead=True,
@@ -164,24 +148,40 @@ def _already_activated_today(run_date: str, user_id: str) -> bool:
     return bool(item and item.get("status") == "success")
 
 
-def _activate_user(user_id: str) -> tuple[int, str]:
-    """POST to Okta's activate endpoint with sendEmail=true.
-
-    Returns (http_status, error_message_or_empty).
-    """
+def _revoke_sessions(user_id: str) -> tuple[int, str]:
     token = _okta_access_token()
-    resp = requests.post(
-        f"{OKTA_ORG_URL}/api/v1/users/{user_id}/lifecycle/activate",
+    resp = requests.delete(
+        f"{OKTA_ORG_URL}/api/v1/users/{user_id}/sessions",
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         },
-        params={"sendEmail": "true"},
         timeout=10,
     )
     if resp.status_code in (200, 204):
         return resp.status_code, ""
-    # Okta returns a JSON error body with errorCode + errorSummary on failure.
+    if resp.status_code in (403, 404):
+        return resp.status_code, ""
+    try:
+        body = resp.json()
+        summary = body.get("errorSummary") or body.get("errorCode") or resp.text
+    except Exception:
+        summary = resp.text
+    return resp.status_code, summary[:500]
+
+
+def _deactivate_user(user_id: str) -> tuple[int, str]:
+    token = _okta_access_token()
+    resp = requests.post(
+        f"{OKTA_ORG_URL}/api/v1/users/{user_id}/lifecycle/deactivate",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        },
+        timeout=30,
+    )
+    if resp.status_code in (200, 204):
+        return resp.status_code, ""
     try:
         body = resp.json()
         summary = body.get("errorSummary") or body.get("errorCode") or resp.text
@@ -199,7 +199,6 @@ def _record_attempt(
     okta_response_status: int,
     error_message: str,
 ) -> None:
-    """Write one audit row to ohmgym-onboarding-logs."""
     profile = user.get("profile") or {}
     now_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     ttl_epoch = int((datetime.now(timezone.utc) + timedelta(days=DYNAMODB_TTL_DAYS)).timestamp())
@@ -211,7 +210,7 @@ def _record_attempt(
         "last_name": profile.get("lastName", ""),
         "department": profile.get("department", ""),
         "role_title": profile.get("role_title", "") or profile.get("title", ""),
-        "start_date": profile.get("startDate", ""),
+        "start_date": profile.get("endDate", ""),
         "status": status,
         "okta_response_status": okta_response_status,
         "error_message": error_message,
@@ -223,7 +222,6 @@ def _record_attempt(
 
 
 def _post_slack(channel_id: str, text: str, blocks: list) -> tuple[bool, str]:
-    """chat.postMessage wrapper. Returns (ok, error|ts)."""
     resp = requests.post(
         "https://slack.com/api/chat.postMessage",
         headers={
@@ -240,7 +238,6 @@ def _post_slack(channel_id: str, text: str, blocks: list) -> tuple[bool, str]:
 
 
 def _resolve_or_create_channel(name: str) -> tuple[bool, str]:
-    """Resolve channel by name, creating it if missing. Returns (ok, id|error)."""
     if not SLACK_TEAM_ID:
         return False, "missing_team_id_env"
     headers = {"Authorization": f"Bearer {_SLACK_BOT_TOKEN}"}
@@ -283,38 +280,37 @@ def _resolve_or_create_channel(name: str) -> tuple[bool, str]:
 
 def _build_batch_summary_blocks(
     run_date: str,
-    activated: list[dict],
+    deactivated: list[dict],
     errors: list[dict],
     skipped: list[dict],
     batch_run_id: str,
 ) -> tuple[str, list]:
-    """Slack Block Kit shape for the daily summary."""
-    n_act = len(activated)
+    n_act = len(deactivated)
     n_err = len(errors)
-    text = f":rocket: Daily joiner activations — {run_date}: {n_act} activated, {n_err} errors"
+    text = f":no_entry: Daily leaver deactivations — {run_date}: {n_act} deactivated, {n_err} errors"
 
     blocks: list[dict[str, Any]] = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"🚀 Daily joiner activations — {run_date}"},
+            "text": {"type": "plain_text", "text": f"🚪 Daily leaver deactivations — {run_date}"},
         }
     ]
 
-    if activated:
+    if deactivated:
         lines = [
             f"• {u.get('first_name', '')} {u.get('last_name', '')}".strip()
             + (f" — {u['role_title']}, {u['department']}" if u.get("role_title") or u.get("department") else "")
             + f" ({u.get('login', '')})"
-            for u in activated
+            for u in deactivated
         ]
         blocks.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*Activated ({n_act}):*\n" + "\n".join(lines)},
+            "text": {"type": "mrkdwn", "text": f"*Deactivated ({n_act}):*\n" + "\n".join(lines)},
         })
     else:
         blocks.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": "*Activated (0):*\n_No STAGED users with today's startDate._"},
+            "text": {"type": "mrkdwn", "text": "*Deactivated (0):*\n_No ACTIVE users with today's endDate._"},
         })
 
     if errors:
@@ -342,35 +338,33 @@ def _build_batch_summary_blocks(
 
 def _post_batch_summary(
     run_date: str,
-    activated: list[dict],
+    deactivated: list[dict],
     errors: list[dict],
     skipped: list[dict],
     batch_run_id: str,
 ) -> dict:
-    ok, channel_id = _resolve_or_create_channel(JOINER_CHANNEL_NAME)
+    ok, channel_id = _resolve_or_create_channel(LEAVER_CHANNEL_NAME)
     if not ok:
         return {"posted": False, "reason": f"channel:{channel_id}"}
-    text, blocks = _build_batch_summary_blocks(run_date, activated, errors, skipped, batch_run_id)
+    text, blocks = _build_batch_summary_blocks(run_date, deactivated, errors, skipped, batch_run_id)
     ok, detail = _post_slack(channel_id, text, blocks)
     if ok:
         return {"posted": True, "channel": channel_id, "ts": detail}
     return {"posted": False, "reason": f"post:{detail}"}
 
 
-def lambda_handler(event, context):  # noqa: ARG001  (context unused)
-    """Entry point. `event` may contain `override_date` for manual replays."""
+def lambda_handler(event, context):  # noqa: ARG001
     batch_run_id = uuid.uuid4().hex
     override = (event or {}).get("override_date")
     run_date = _today_pt(override)
 
-    activated: list[dict] = []
+    deactivated: list[dict] = []
     errors: list[dict] = []
     skipped: list[dict] = []
 
     try:
-        users = _search_staged_users(run_date)
+        users = _search_active_leavers(run_date)
     except requests.HTTPError as e:
-        # Hard failure — let Lambda surface the error so the alarm fires.
         print(json.dumps({
             "event": "okta_search_failed",
             "run_date": run_date,
@@ -388,11 +382,29 @@ def lambda_handler(event, context):  # noqa: ARG001  (context unused)
             errors.append({"login": login, "error": "missing_user_id"})
             continue
 
-        if _already_activated_today(run_date, user_id):
-            skipped.append({"login": login, "user_id": user_id, "reason": "already_activated_today"})
+        if _already_deactivated_today(run_date, user_id):
+            skipped.append({"login": login, "user_id": user_id, "reason": "already_deactivated_today"})
             continue
 
-        http_status, err_msg = _activate_user(user_id)
+        sess_status, sess_err = _revoke_sessions(user_id)
+        if sess_status not in (200, 204, 403, 404):
+            errors.append({
+                "login": login,
+                "user_id": user_id,
+                "error": f"session_revoke: {sess_err}",
+                "http_status": sess_status,
+            })
+            _record_attempt(
+                run_date=run_date,
+                batch_run_id=batch_run_id,
+                user=user,
+                status="error",
+                okta_response_status=sess_status,
+                error_message=f"session_revoke: {sess_err}",
+            )
+            continue
+
+        http_status, err_msg = _deactivate_user(user_id)
         if http_status in (200, 204):
             entry = {
                 "user_id": user_id,
@@ -402,7 +414,7 @@ def lambda_handler(event, context):  # noqa: ARG001  (context unused)
                 "department": profile.get("department", ""),
                 "role_title": profile.get("role_title", "") or profile.get("title", ""),
             }
-            activated.append(entry)
+            deactivated.append(entry)
             _record_attempt(
                 run_date=run_date,
                 batch_run_id=batch_run_id,
@@ -422,19 +434,19 @@ def lambda_handler(event, context):  # noqa: ARG001  (context unused)
                 error_message=err_msg,
             )
 
-        if ACTIVATE_PACE_SECONDS > 0:
-            time.sleep(ACTIVATE_PACE_SECONDS)
+        if DEACTIVATE_PACE_SECONDS > 0:
+            time.sleep(DEACTIVATE_PACE_SECONDS)
 
-    slack_result = _post_batch_summary(run_date, activated, errors, skipped, batch_run_id)
+    slack_result = _post_batch_summary(run_date, deactivated, errors, skipped, batch_run_id)
 
     summary = {
-        "event": "onboarding_batch_complete",
+        "event": "offboarding_batch_complete",
         "run_date": run_date,
         "batch_run_id": batch_run_id,
-        "activated_count": len(activated),
+        "deactivated_count": len(deactivated),
         "error_count": len(errors),
         "skipped_count": len(skipped),
-        "activated": activated,
+        "deactivated": deactivated,
         "errors": errors,
         "skipped": skipped,
         "slack": slack_result,
