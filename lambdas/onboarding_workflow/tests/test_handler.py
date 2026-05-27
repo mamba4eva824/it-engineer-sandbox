@@ -59,7 +59,9 @@ def test_search_url_includes_today_pt(reset_token_cache, empty_audit_table):
         handler.lambda_handler({}, None)
         search_req = next(r for r in rm.request_history if r.url.startswith(f"{OKTA_BASE}/api/v1/users") and r.method == "GET")
         qs = parse_qs(urlparse(search_req.url).query)
-        assert qs["search"][0] == f'status eq "STAGED" and profile.startDate eq "{TODAY}"'
+        assert f'profile.startDate eq "{TODAY}"' in qs["search"][0]
+        assert "STAGED" in qs["search"][0]
+        assert "DEPROVISIONED" in qs["search"][0]
         assert qs["limit"][0] == "200"
 
 
