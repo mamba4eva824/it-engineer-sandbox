@@ -1,13 +1,13 @@
 # Ohmgym Onboarding Workflow — Scheduled AWS → Okta → Slack Activation
 
-The **proactive** half of the JML pipeline. Every morning at 9:00 AM America/Los_Angeles, an AWS-native scheduled job queries Okta for users whose `status == STAGED` and `profile.startDate == today_PT`, activates each one with `sendEmail=true`, writes a full identity-snapshot audit row to DynamoDB, and posts one Block Kit batch summary to `#joiner-it-ops`. The existing `novatech-okta-hook` Lambda from [doc 08](08-okta-event-hook-lambda.md) is the **reactive** half — it fires per-user when each hire clicks their activation link later in the day.
+The **proactive** half of the JML pipeline. Every morning at 9:00 AM America/Los_Angeles, an AWS-native scheduled job queries Okta for users whose `status == STAGED` and `profile.startDate == today_PT`, activates each one with `sendEmail=true`, writes a full identity-snapshot audit row to DynamoDB, and posts one Block Kit batch summary to `#joiner-it-ops`. The `ohmgym-activation-workflow` Lambda from [doc 08](08-okta-event-hook-lambda.md) is the **reactive** half — it fires per-user when each hire clicks their activation link later in the day.
 
 Companion to:
 - [04-okta-migration.md](04-okta-migration.md) — Okta IdP foundation
 - [06-end-to-end-joiner-demo.md](06-end-to-end-joiner-demo.md) — `joiner_workflow.py --use-activation-email` (manual one-off path)
 - [08-okta-event-hook-lambda.md](08-okta-event-hook-lambda.md) — Okta event hook → Lambda → Slack (the reactive half this complements)
 
-This adds **a second Terraform-managed AWS stack** in `terraform/aws-onboarding/`, deployed in **us-west-1** for regional isolation from the existing us-east-1 reactive stack. Four Secrets Manager entries are replicated cross-region via native `replica` blocks so the new Lambda reads local-region ARNs with zero application-code change.
+This adds **a second Terraform-managed AWS stack** in `terraform/aws-onboarding/`, deployed in **us-west-1** alongside `terraform/aws-secrets/` (shared `ohmgym-jml/*` credentials) and `ohmgym-activation-workflow` (reactive joiner).
 
 ## Purpose
 
@@ -34,7 +34,7 @@ Today, a human runs `joiner_workflow.py --use-activation-email` per new hire. Th
 │       ▼                                                                          │
 │  AWS Lambda  ohmgym-onboarding-workflow  (Python 3.12, 512 MB, 60s)              │
 │       │                                                                          │
-│       ├─► Secrets Manager (us-west-1 replicas) × 4 — at cold start               │
+│       ├─► Secrets Manager (us-west-1 ohmgym-jml/*) × 4 — at cold start           │
 │       │     slack-bot-token, okta-api-client-id,                                 │
 │       │     okta-api-key-id, okta-api-private-key                                │
 │       │                                                                          │
@@ -68,7 +68,7 @@ Today, a human runs `joiner_workflow.py --use-activation-email` per new hire. Th
 │    action: SNS topic → email                                                     │
 │                                                                                  │
 │  ─── unchanged ───                                                               │
-│  Existing novatech-okta-hook (us-east-1) continues handling per-user             │
+│  ohmgym-activation-workflow (us-west-1) continues handling per-user              │
 │  activation Slack posts later in the day as each hire clicks their link.         │
 │                                                                                  │
 └────────────────────────────────────────────────────────────────────────────────┘
@@ -93,13 +93,13 @@ terraform/aws-onboarding/
 └── terraform.tfvars.example # committed template
 ```
 
-**13 new AWS resources** in us-west-1 + **4 replica modifications** to `terraform/aws/secrets.tf` (us-east-1). The replica modifications were a one-line `replica { region = "us-west-1" }` block per secret — beats cross-region GetSecretValue calls (latency + regional dependency) and beats duplicate native secrets (rotation drift).
+**13 new AWS resources** in us-west-1. Shared secrets live in `terraform/aws-secrets/` (`ohmgym-jml/*` prefix, single region).
 
 ## Decisions worth calling out
 
-### Why us-west-1 and not us-east-1
+### Why us-west-1
 
-The existing reactive stack lives in us-east-1. Putting the new proactive stack in us-west-1 gives **regional isolation**: separate Terraform state, separate IAM surface, a misapplied plan on this stack can't touch the production-shaped doc-08 work. The cost is ~$1.60/month in replicated-secret overhead ($0.40 × 4 secrets). Worth it for the blast-radius reduction.
+All three JML Lambdas and shared secrets are colocated in **us-west-1** (`terraform/aws-secrets/`, `terraform/aws/`, `terraform/aws-onboarding/`, `terraform/aws-offboarding/`).
 
 ### Why EventBridge Scheduler and not the legacy CloudWatch Events rule
 
@@ -244,7 +244,7 @@ Five things provable from that output:
 4. **DynamoDB row written** (otherwise re-running would fire activate again)
 5. **Slack post landed** (otherwise `slack.posted` would be false)
 
-Click the activation email in `chris@ohmgym.com` (Gmail `+` aliasing routes `chris+priya@` here) → the existing `novatech-okta-hook` reactive Lambda fires a per-user `✅ activated Okta` post a few seconds later. That's the JML pipeline working end-to-end across both Lambdas.
+Click the activation email in `chris@ohmgym.com` (Gmail `+` aliasing routes `chris+priya@` here) → `ohmgym-activation-workflow` fires a per-user `✅ activated Okta` post a few seconds later. That's the JML pipeline working end-to-end across both Lambdas.
 
 ## Idempotency contract
 
@@ -270,7 +270,7 @@ Click the activation email in `chris@ohmgym.com` (Gmail `+` aliasing routes `chr
 ### What's proven (after operator runs apply + smoke test)
 
 - **AWS-native scheduled lifecycle automation** against the Okta Management API
-- **Cross-region Secrets Manager replication** for blast-radius isolation between two AWS stacks
+- **Shared single-region Secrets Manager** (`terraform/aws-secrets/`, `ohmgym-jml/*`)
 - **Server-side Okta `search` filter** on custom profile attributes (the only correct way to filter by `startDate`)
 - **DynamoDB-backed idempotency + audit trail** with TTL-driven cost hygiene
 - **CloudWatch alarm + SNS email** on Lambda errors for a daily automation
@@ -296,7 +296,7 @@ The screen-share moment: open three terminals, run `seed_staged_user.py` in one,
 - [`lambdas/onboarding_workflow/handler.py`](../lambdas/onboarding_workflow/handler.py) — the Lambda
 - [`lambdas/onboarding_workflow/tests/test_handler.py`](../lambdas/onboarding_workflow/tests/test_handler.py) — 11 pytest cases
 - [`terraform/aws-onboarding/`](../terraform/aws-onboarding/) — the us-west-1 stack
-- [`terraform/aws/secrets.tf`](../terraform/aws/secrets.tf) — replica blocks added for the cross-region secrets
+- [`terraform/aws-secrets/`](../terraform/aws-secrets/) — shared `ohmgym-jml/*` secrets (us-west-1)
 - [`scripts/onboarding/`](../scripts/onboarding/) — seed, invoke, replay CLI helpers
 - [`scripts/slack/notify.py`](../scripts/slack/notify.py) — `post_joiner_batch_summary` helper
 - [`.github/workflows/onboarding-workflow-ci.yml`](../.github/workflows/onboarding-workflow-ci.yml) — CI

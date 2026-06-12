@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill from .env + existing webhook secret.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   chmod 600 terraform.tfvars
+
+okta_webhook_secret = "REPLACE_ME_WITH_64_CHAR_HEX_STRING"
+
+slack_bot_token = "xoxb-REPLACE_ME"
+
+okta_api_client_id   = "0oaXXXXXXXXXXXXXXXXX"
+okta_api_key_id      = "REPLACE_ME"
+okta_api_private_key = <<-EOT
+-----BEGIN PRIVATE KEY-----
+REPLACE_WITH_PEM_LINES
+-----END PRIVATE KEY-----
+EOT

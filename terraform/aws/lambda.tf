@@ -29,7 +29,7 @@ resource "aws_cloudwatch_log_group" "lambda" {
 
 resource "aws_lambda_function" "okta_activation_handler" {
   function_name = var.name_prefix
-  description   = "Receives Okta event hook POSTs (user.account.update_password) and posts to Slack #joiner-it-ops."
+  description   = "ohmgym-activation-workflow: Okta event hook → per-user Slack post on #joiner-it-ops."
   role          = aws_iam_role.lambda_exec.arn
   handler       = "handler.lambda_handler"
   runtime       = "python3.12"
@@ -43,11 +43,11 @@ resource "aws_lambda_function" "okta_activation_handler" {
   environment {
     variables = {
       SECRETS_REGION                   = var.aws_region
-      OKTA_SECRET_NAME                 = aws_secretsmanager_secret.okta_webhook_secret.name
-      SLACK_BOT_TOKEN_SECRET_NAME      = aws_secretsmanager_secret.slack_bot_token.name
-      OKTA_API_CLIENT_ID_SECRET_NAME   = aws_secretsmanager_secret.okta_api_client_id.name
-      OKTA_API_KEY_ID_SECRET_NAME      = aws_secretsmanager_secret.okta_api_key_id.name
-      OKTA_API_PRIVATE_KEY_SECRET_NAME = aws_secretsmanager_secret.okta_api_private_key.name
+      OKTA_SECRET_NAME                 = var.okta_webhook_secret_name
+      SLACK_BOT_TOKEN_SECRET_NAME      = var.slack_bot_token_secret_name
+      OKTA_API_CLIENT_ID_SECRET_NAME   = var.okta_api_client_id_secret_name
+      OKTA_API_KEY_ID_SECRET_NAME      = var.okta_api_key_id_secret_name
+      OKTA_API_PRIVATE_KEY_SECRET_NAME = var.okta_api_private_key_secret_name
       OKTA_ORG_URL                     = var.okta_org_url
       SLACK_TEAM_ID                    = var.slack_team_id
       JOINER_CHANNEL_NAME              = var.joiner_channel_name

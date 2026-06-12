@@ -1,0 +1,88 @@
+name: JML west migration CI
+
+# Validates west-only secrets migration: contract tests, all Lambda pytest suites,
+# and Terraform fmt/validate across aws-secrets + three workflow stacks.
+
+on:
+  push:
+    branches:
+      - feature/ohmgym-offboarding-workflow
+      - main
+    paths:
+      - 'lambdas/**'
+      - 'terraform/**'
+      - 'tests/**'
+      - '.github/workflows/jml-west-migration-ci.yml'
+      - '.github/workflows/*-workflow-ci.yml'
+      - '.github/workflows/reactive-lambda-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lambdas/**'
+      - 'terraform/**'
+      - 'tests/**'
+      - '.github/workflows/jml-west-migration-ci.yml'
+
+concurrency:
+  group: jml-west-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-contract:
+    name: pytest (unit contract + lambdas)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tests/requirements-dev.txt
+          pip install -r lambdas/onboarding_workflow/requirements-dev.txt
+          pip install -r lambdas/offboarding_workflow/requirements-dev.txt
+          pip install -r lambdas/okta_activation_handler/requirements-dev.txt
+      - name: Repo contract tests
+        run: pytest tests/unit -v
+      - name: Lambda unit tests
+        run: |
+          pytest lambdas/onboarding_workflow/tests -v
+          pytest lambdas/offboarding_workflow/tests -v
+          pytest lambdas/okta_activation_handler/tests -v
+
+  terraform-validate:
+    name: terraform fmt + validate (${{ matrix.stack }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - terraform/aws-secrets
+          - terraform/aws
+          - terraform/aws-onboarding
+          - terraform/aws-offboarding
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+      - uses: actions/setup-python@v5
+        if: matrix.stack != 'terraform/aws-secrets'
+        with:
+          python-version: '3.12'
+      - name: Build activation Lambda zip
+        if: matrix.stack == 'terraform/aws'
+        run: bash lambdas/okta_activation_handler/build.sh
+      - name: Build onboarding Lambda zip
+        if: matrix.stack == 'terraform/aws-onboarding'
+        run: bash lambdas/onboarding_workflow/build.sh
+      - name: Build offboarding Lambda zip
+        if: matrix.stack == 'terraform/aws-offboarding'
+        run: bash lambdas/offboarding_workflow/build.sh
+      - working-directory: ${{ matrix.stack }}
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false
+          terraform validate -no-color

@@ -4,5 +4,5 @@
 .terraform/
 .terraform.lock.hcl
 
-# Real values (replica ARNs + alarm email). Committed template is .tfvars.example.
+# Real values (secret ARNs + alarm email). Committed template is .tfvars.example.
 terraform.tfvars

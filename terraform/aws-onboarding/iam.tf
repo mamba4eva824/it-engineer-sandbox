@@ -46,22 +46,20 @@ resource "aws_iam_role_policy" "lambda_logs" {
   policy = data.aws_iam_policy_document.lambda_logs.json
 }
 
-# Secrets Manager — scoped to the 4 us-west-1 replica ARNs only.
-# The trailing -* is the Secrets Manager auto-suffix, NOT a wildcard escape.
+# Secrets Manager — scoped to the 4 ohmgym-jml secret ARNs only.
 data "aws_iam_policy_document" "lambda_secrets" {
   statement {
     effect  = "Allow"
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
-      "${var.slack_bot_token_replica_arn}-*",
-      "${var.okta_api_client_id_replica_arn}-*",
-      "${var.okta_api_key_id_replica_arn}-*",
-      "${var.okta_api_private_key_replica_arn}-*",
-      # Also allow the un-suffixed form (replica ARNs from terraform output don't include the suffix).
-      var.slack_bot_token_replica_arn,
-      var.okta_api_client_id_replica_arn,
-      var.okta_api_key_id_replica_arn,
-      var.okta_api_private_key_replica_arn,
+      "${var.slack_bot_token_secret_arn}-*",
+      "${var.okta_api_client_id_secret_arn}-*",
+      "${var.okta_api_key_id_secret_arn}-*",
+      "${var.okta_api_private_key_secret_arn}-*",
+      var.slack_bot_token_secret_arn,
+      var.okta_api_client_id_secret_arn,
+      var.okta_api_key_id_secret_arn,
+      var.okta_api_private_key_secret_arn,
     ]
   }
 }

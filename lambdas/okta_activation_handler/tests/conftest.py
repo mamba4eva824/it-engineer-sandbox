@@ -20,7 +20,7 @@ from moto import mock_aws
 _HANDLER_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_HANDLER_DIR))
 
-TEST_REGION = "us-east-1"
+TEST_REGION = "us-west-1"
 TEST_OKTA_ORG = "https://test.okta.com"
 SECRET_NAMES = {
     "OKTA_SECRET_NAME": "test/okta-webhook-secret",

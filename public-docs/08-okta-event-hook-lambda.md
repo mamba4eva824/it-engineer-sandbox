@@ -47,10 +47,10 @@ Option 3 is also the architecture multiple repo runbooks (`mover-workflow.md`, `
 │             │  Authorization: <shared secret from Secrets Manager>                  │
 │             │  body: { data: { events: [...LogEvent...] } }                         │
 │             ▼                                                                        │
-│  AWS Lambda Function URL  (us-east-1, account 430118826061)                         │
-│       │  https://dfjxsz67aq7iwqc4hzqszw3axi0txfbj.lambda-url.us-east-1.on.aws/      │
+│  AWS Lambda Function URL  (us-west-1)                                               │
+│       │  https://<function-id>.lambda-url.us-west-1.on.aws/  (from terraform output)  │
 │       ▼                                                                              │
-│  Lambda: novatech-okta-hook  (Python 3.12, 256 MB, 10 s)                            │
+│  Lambda: ohmgym-activation-workflow  (Python 3.12, 256 MB, 10 s)                            │
 │       │                                                                              │
 │       ├─► Secrets Manager: GetSecretValue ×5                                        │
 │       │     • okta-webhook-secret    (Authorization header verification)             │
@@ -73,7 +73,7 @@ Option 3 is also the architecture multiple repo runbooks (`mover-workflow.md`, `
 │       │                                                                              │
 │       ├─► chat.postMessage with Block Kit (login, activated_at, source, status)     │
 │       │                                                                              │
-│       └─► CloudWatch Logs: /aws/lambda/novatech-okta-hook                           │
+│       └─► CloudWatch Logs: /aws/lambda/ohmgym-activation-workflow                           │
 │             └─► structured JSON includes the skip reason:                            │
 │                {"event":"okta_hook_processed","posted":[],                          │
 │                 "skipped":[{"login":"...","reason":"not_first_activation:..."}]}    │
@@ -92,9 +92,9 @@ Every arrow is observable: Okta system log on the source side, CloudWatch on the
 ```
 terraform/aws/
 ├── .gitignore               # state files, *.tfvars (real secrets), build artifacts
-├── providers.tf             # aws ~> 5.70 + local ~> 2.5; us-east-1; default tags
-├── variables.tf             # 7 inputs (2 sensitive: secret + bot token)
-├── secrets.tf               # 2 Secrets Manager entries + their versions
+├── providers.tf             # aws ~> 5.70 + local ~> 2.5; us-west-1; default tags
+├── variables.tf             # secret ARNs from terraform/aws-secrets + okta_org_url
+# Secrets live in terraform/aws-secrets/ (ohmgym-jml/*), not in this stack.
 ├── iam.tf                   # Lambda exec role + AWSLambdaBasicExecutionRole + scoped GetSecretValue
 ├── lambda.tf                # CloudWatch log group + Function + Function URL
 ├── outputs.tf               # 6 outputs (function_url, log group, ARNs, role)
@@ -127,7 +127,7 @@ Okta active users: 9 / 10
   (no chris+marcus@ohmgym.com yet)
 Slack channels: #joiner-it-ops (C0B0N91FHN1), #leaver-it-ops (C0B1KV5CS4Q)
   (both created via API by scripts/slack/notify.py earlier)
-Lambda: novatech-okta-hook  status=Active  function URL VERIFIED by Okta
+Lambda: ohmgym-activation-workflow  status=Active  function URL VERIFIED by Okta
 Okta event hook: VERIFIED, subscribed to user.account.update_password
 ```
 
@@ -166,7 +166,7 @@ In incognito: open Gmail (`chris@ohmgym.com`), find the Okta welcome email addre
 
 ### Step 3 — Okta event hook fires the Lambda (within seconds of clicking)
 
-CloudWatch tail for `/aws/lambda/novatech-okta-hook` during the run captures the cold start + invocation:
+CloudWatch tail for `/aws/lambda/ohmgym-activation-workflow` during the run captures the cold start + invocation:
 
 ```
 2026-04-30T00:02:39.287Z  INIT_START Runtime Version: python:3.12...
@@ -381,7 +381,7 @@ The JD calls out: *"Develop, test, deploy API integrations,"* *"Reducing operati
 - **Cloud functions + secrets management** — Lambda runtime, IAM execution roles, Secrets Manager, scoped policies
 - **Cross-platform automation** — three SaaS tenants (Okta, AWS, Slack) plus one cloud platform (AWS infra) coordinating from a single trigger
 
-The screen-share moment: run the joiner CLI, watch `#joiner-it-ops` post the welcome, click the activation email in incognito, watch the *second* `#joiner-it-ops` post arrive 1 second after MFA enrollment completes, then `aws logs tail /aws/lambda/novatech-okta-hook --since 5m` to show the structured log line proving the Lambda fired. Three terminals, three real cloud platforms, one feature, end-to-end demoable in 4 minutes.
+The screen-share moment: run the joiner CLI, watch `#joiner-it-ops` post the welcome, click the activation email in incognito, watch the *second* `#joiner-it-ops` post arrive 1 second after MFA enrollment completes, then `aws logs tail /aws/lambda/ohmgym-activation-workflow --since 5m` to show the structured log line proving the Lambda fired. Three terminals, three real cloud platforms, one feature, end-to-end demoable in 4 minutes.
 
 ## Links
 
