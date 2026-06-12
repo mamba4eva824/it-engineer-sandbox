@@ -14,14 +14,13 @@ invocation:
   4. Post one batch-summary Block Kit message to #joiner-it-ops.
   5. Emit structured JSON to CloudWatch Logs for each user + the final summary.
 
-This is the PROACTIVE half of the JML pipeline. The existing us-east-1
-novatech-okta-hook Lambda is the REACTIVE half (per-user posts when each
-hire clicks their activation link later in the day).
+This is the PROACTIVE half of the JML pipeline. The ohmgym-activation-workflow Lambda is the REACTIVE half (per-user posts
+when each hire clicks their activation link later in the day).
 
-Secrets are pulled from AWS Secrets Manager (us-west-1 replicas) at module
+Secrets are pulled from AWS Secrets Manager (us-west-1 ohmgym-jml/*) at module
 load and cached for cold-start amortization across reused executions. The
 execution role is scoped (in terraform/aws-onboarding/iam.tf) to
-GetSecretValue on exactly the 4 replica ARNs and GetItem/PutItem on exactly
+GetSecretValue on exactly the 4 secret ARNs and GetItem/PutItem on exactly
 the ohmgym-onboarding-logs table.
 """
 

@@ -115,9 +115,9 @@ All three write structured JSON logs to gitignored `logs/<workflow>-events.jsonl
 
 Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook (`user.account.update_password`) fires an AWS Lambda Function URL, which posts to `#joiner-it-ops`. The Joiner CLI's welcome-sent post and the Leaver CLI's deactivation post complete the three-event audit trail. End-to-end latency from click to Slack post: **~1 second** including a cold start. ([live trace against Marcus Reyes](public-docs/08-okta-event-hook-lambda.md))
 
-- **First Terraform-managed AWS infrastructure** — `terraform/aws/` ships 13 resources via standard `init / plan / apply`: Lambda + Function URL + execution role + scoped IAM policy + 5 Secrets Manager entries + CloudWatch log group
+- **Terraform-managed AWS JML stack (us-west-1)** — `terraform/aws-secrets/` (shared `ohmgym-jml/*` secrets) + `terraform/aws/` (`ohmgym-activation-workflow` reactive Lambda) + onboarding/offboarding schedulers
 - **Least-privilege IAM** — execution role grants `secretsmanager:GetSecretValue` on exactly the five specific secret ARNs the Lambda needs (no wildcards, no broad reads)
-- **Secrets in Secrets Manager, not env vars** — Okta webhook secret, Slack bot token, and Okta API JWT credentials all fetched at cold start; rotation is a `tfvars` change with no code redeploy
+- **Secrets in Secrets Manager, not env vars** — five `ohmgym-jml/*` entries in us-west-1; all three Lambdas fetch at cold start; rotation is `terraform/aws-secrets` apply with no Lambda code redeploy
 - **Server-side dedup** — Lambda calls `GET /api/v1/users/{id}` and skips if `lastLogin` is populated, so subsequent password rotations don't misfire as "new hire activated" posts; skip reasons land in CloudWatch as auditable structured log lines
 - **Slack channels created via API** — `scripts/slack/notify.py:ensure_channel` calls `conversations.create` (idempotent: handles `name_taken` + Enterprise Grid `team_id` requirements), so `#joiner-it-ops` and `#leaver-it-ops` are part of the deploy artifact, not a one-off admin step
 
@@ -290,7 +290,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | Live trace of `joiner_workflow.py --use-activation-email`: STAGED user → activation email (Gmail `+` routing) → group rule fire → SCIM cascade to Slack → incognito sign-in. Audit-log evidence on both Okta + Slack sides. |
 | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | Live trace of `leaver_workflow.py` against the same Sandra: sessions revoked → Okta deactivate → SCIM DELETE cascade to Slack in 3 seconds. Idempotent re-run validated. Closes the JML triplet. |
 | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | First Terraform-managed AWS infrastructure: Okta event hook posts to a Lambda Function URL, which posts to `#joiner-it-ops` when a new hire actually activates. Marcus Reyes trace, CloudWatch evidence, secrets in Secrets Manager, least-privilege IAM. |
-| [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | Second Terraform-managed AWS stack (us-west-1, isolated): EventBridge Scheduler → Lambda → Okta `search`-filter activate POST → DynamoDB audit row → Slack batch summary. 9am PT daily. Cross-region Secrets Manager replicas. 11 pytest cases + GitHub Actions CI. |
+| [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | Proactive joiner stack (us-west-1): EventBridge Scheduler → `ohmgym-onboarding-workflow` → Okta activate + DynamoDB + Slack batch. 9am PT daily. Shares `terraform/aws-secrets/`. |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 

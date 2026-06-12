@@ -16,6 +16,7 @@ on:
   push:
     branches:
       - 'feature/reactive-lambda-**'
+      - feature/ohmgym-offboarding-workflow
     paths:
       - 'lambdas/okta_activation_handler/**'
       - 'terraform/aws/**'

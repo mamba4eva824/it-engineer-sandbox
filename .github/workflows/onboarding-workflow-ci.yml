@@ -26,10 +26,11 @@ on:
   push:
     branches:
       - feature/ohmgym-onboarding-workflow
+      - feature/ohmgym-offboarding-workflow
     paths:
       - 'lambdas/onboarding_workflow/**'
       - 'terraform/aws-onboarding/**'
-      - 'terraform/aws/secrets.tf'
+      - 'terraform/aws-secrets/**'
       - 'terraform/aws/outputs.tf'
       - 'scripts/onboarding/**'
       - 'scripts/slack/notify.py'
@@ -40,7 +41,7 @@ on:
     paths:
       - 'lambdas/onboarding_workflow/**'
       - 'terraform/aws-onboarding/**'
-      - 'terraform/aws/secrets.tf'
+      - 'terraform/aws-secrets/**'
       - 'terraform/aws/outputs.tf'
       - 'scripts/onboarding/**'
       - 'scripts/slack/notify.py'

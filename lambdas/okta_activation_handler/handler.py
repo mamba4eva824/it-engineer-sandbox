@@ -40,7 +40,7 @@ import jwt
 import requests
 
 
-SECRETS_REGION = os.environ.get("SECRETS_REGION", "us-east-1")
+SECRETS_REGION = os.environ.get("SECRETS_REGION", "us-west-1")
 OKTA_SECRET_NAME = os.environ["OKTA_SECRET_NAME"]
 SLACK_BOT_TOKEN_SECRET_NAME = os.environ["SLACK_BOT_TOKEN_SECRET_NAME"]
 OKTA_API_CLIENT_ID_SECRET_NAME = os.environ["OKTA_API_CLIENT_ID_SECRET_NAME"]

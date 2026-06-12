@@ -18,7 +18,7 @@ invocation:
 This is the PROACTIVE leaver half of the JML pipeline. SCIM cascades Slack
 (and GWS for real SCIM users) without code in this Lambda.
 
-Secrets are pulled from AWS Secrets Manager (us-west-1 replicas) at module
+Secrets are pulled from AWS Secrets Manager (us-west-1 ohmgym-jml/*) at module
 load and cached for cold-start amortization across reused executions.
 """
 

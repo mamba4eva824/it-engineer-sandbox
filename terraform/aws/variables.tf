@@ -1,20 +1,17 @@
-# Input variables for the Okta-event-hook → Slack Lambda stack.
+# Input variables for the ohmgym-activation-workflow (reactive joiner) stack.
 #
-# Sensitive values (slack_bot_token, okta_webhook_secret) live in a gitignored
-# terraform.tfvars; copy terraform.tfvars.example to terraform.tfvars and fill
-# them in. Plan/apply marks them sensitive so they don't appear in CLI output
-# or in CI logs.
+# Secret values live in terraform/aws-secrets/. This stack references ARNs only.
 
 variable "aws_region" {
-  description = "AWS region for all resources."
+  description = "AWS region for all resources (us-west-1 — colocated with JML secrets)."
   type        = string
-  default     = "us-east-1"
+  default     = "us-west-1"
 }
 
 variable "name_prefix" {
-  description = "Prefix applied to every resource name (lambda, secrets, IAM)."
+  description = "Prefix applied to every resource name (lambda, IAM, log group)."
   type        = string
-  default     = "novatech-okta-hook"
+  default     = "ohmgym-activation-workflow"
 }
 
 variable "tags" {
@@ -22,22 +19,10 @@ variable "tags" {
   type        = map(string)
   default = {
     Project   = "IT-Operations-Sandbox"
-    Component = "okta-event-hook"
+    Component = "activation-workflow"
     ManagedBy = "terraform"
     Owner     = "it-ops"
   }
-}
-
-variable "okta_webhook_secret" {
-  description = "Shared secret Okta sends in the Authorization header on every event POST."
-  type        = string
-  sensitive   = true
-}
-
-variable "slack_bot_token" {
-  description = "Slack xoxb- bot token; the Lambda uses it to post to #joiner-it-ops."
-  type        = string
-  sensitive   = true
 }
 
 variable "slack_team_id" {
@@ -47,26 +32,8 @@ variable "slack_team_id" {
 }
 
 variable "okta_org_url" {
-  description = "Okta tenant base URL, e.g. https://integrator-2367542.okta.com — used by the Lambda's dedup lookup."
+  description = "Okta tenant base URL — used by the Lambda's dedup lookup."
   type        = string
-}
-
-variable "okta_api_client_id" {
-  description = "Client id of the Okta API Services app. Same value as OKTA_CLIENT_ID in .env."
-  type        = string
-  sensitive   = true
-}
-
-variable "okta_api_key_id" {
-  description = "Key id (kid) registered on the Okta API Services app. Same value as OKTA_KEY_ID in .env."
-  type        = string
-  sensitive   = true
-}
-
-variable "okta_api_private_key" {
-  description = "PEM-encoded private key matching okta_api_key_id. Same value as OKTA_PRIVATE_KEY in .env."
-  type        = string
-  sensitive   = true
 }
 
 variable "joiner_channel_name" {
@@ -79,4 +46,56 @@ variable "lambda_log_retention_days" {
   description = "CloudWatch log retention for the Lambda's log group."
   type        = number
   default     = 14
+}
+
+# Secret ARNs from terraform/aws-secrets outputs (us-west-1).
+variable "slack_bot_token_secret_arn" {
+  description = "ARN for ohmgym-jml/slack-bot-token."
+  type        = string
+}
+
+variable "okta_api_client_id_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-client-id."
+  type        = string
+}
+
+variable "okta_api_key_id_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-key-id."
+  type        = string
+}
+
+variable "okta_api_private_key_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-private-key."
+  type        = string
+}
+
+variable "okta_webhook_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-webhook-secret."
+  type        = string
+}
+
+# Secret names passed to Lambda env vars (GetSecretValue by name).
+variable "slack_bot_token_secret_name" {
+  type    = string
+  default = "ohmgym-jml/slack-bot-token"
+}
+
+variable "okta_api_client_id_secret_name" {
+  type    = string
+  default = "ohmgym-jml/okta-api-client-id"
+}
+
+variable "okta_api_key_id_secret_name" {
+  type    = string
+  default = "ohmgym-jml/okta-api-key-id"
+}
+
+variable "okta_api_private_key_secret_name" {
+  type    = string
+  default = "ohmgym-jml/okta-api-private-key"
+}
+
+variable "okta_webhook_secret_name" {
+  type    = string
+  default = "ohmgym-jml/okta-webhook-secret"
 }

@@ -1,10 +1,10 @@
 # Input variables for the ohmgym-onboarding-workflow stack.
 #
-# Sensitive inputs (the 4 replica ARNs the operator copies from terraform/aws
-# outputs, and the alarm email) live in a gitignored terraform.tfvars.
+# Sensitive inputs (the 4 secret ARNs from terraform/aws-secrets outputs, and alarm email)
+# live in a gitignored terraform.tfvars.
 
 variable "aws_region" {
-  description = "AWS region for all resources in this stack. Pinned to us-west-1 for isolation from the existing us-east-1 stack."
+  description = "AWS region for all resources in this stack (us-west-1)."
   type        = string
   default     = "us-west-1"
 }
@@ -32,52 +32,46 @@ variable "tags" {
   }
 }
 
-# Replica ARNs from the us-east-1 stack. After `terraform -chdir=terraform/aws apply`,
-# copy the four `*_replica_arn_us_west_1` outputs into terraform.tfvars.
-variable "slack_bot_token_replica_arn" {
-  description = "us-west-1 replica ARN for the Slack bot token (from terraform/aws output slack_bot_token_replica_arn_us_west_1)."
+# Secret ARNs from terraform/aws-secrets (us-west-1 primaries).
+variable "slack_bot_token_secret_arn" {
+  description = "ARN for ohmgym-jml/slack-bot-token (terraform/aws-secrets output)."
   type        = string
 }
 
-variable "okta_api_client_id_replica_arn" {
-  description = "us-west-1 replica ARN for the Okta API client id."
+variable "okta_api_client_id_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-client-id."
   type        = string
 }
 
-variable "okta_api_key_id_replica_arn" {
-  description = "us-west-1 replica ARN for the Okta API key id."
+variable "okta_api_key_id_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-key-id."
   type        = string
 }
 
-variable "okta_api_private_key_replica_arn" {
-  description = "us-west-1 replica ARN for the Okta API private key (PEM)."
+variable "okta_api_private_key_secret_arn" {
+  description = "ARN for ohmgym-jml/okta-api-private-key."
   type        = string
 }
 
-# Replica secret NAMES (used as env vars for the Lambda's SecretsManager GetSecretValue calls).
-# These match the suffix-less form: secret arn has the 6-char suffix; the name does not.
 variable "slack_bot_token_secret_name" {
-  description = "Secret name (without ARN suffix) for the Slack bot token replica."
+  description = "Secret name for GetSecretValue (no ARN suffix)."
   type        = string
-  default     = "novatech-okta-hook/slack-bot-token"
+  default     = "ohmgym-jml/slack-bot-token"
 }
 
 variable "okta_api_client_id_secret_name" {
-  description = "Secret name for the Okta API client id replica."
-  type        = string
-  default     = "novatech-okta-hook/okta-api-client-id"
+  type    = string
+  default = "ohmgym-jml/okta-api-client-id"
 }
 
 variable "okta_api_key_id_secret_name" {
-  description = "Secret name for the Okta API key id replica."
-  type        = string
-  default     = "novatech-okta-hook/okta-api-key-id"
+  type    = string
+  default = "ohmgym-jml/okta-api-key-id"
 }
 
 variable "okta_api_private_key_secret_name" {
-  description = "Secret name for the Okta API private key replica."
-  type        = string
-  default     = "novatech-okta-hook/okta-api-private-key"
+  type    = string
+  default = "ohmgym-jml/okta-api-private-key"
 }
 
 variable "okta_org_url" {

@@ -1,6 +1,6 @@
 # Provider + Terraform version pinning.
 #
-# Region is us-east-1 to match the existing AWS profile (account 430118826061).
+# Region is us-west-1 — colocated with terraform/aws-secrets and proactive JML stacks.
 # State is local for now — Phase 5 of the roadmap will move to S3 + DynamoDB
 # remote state once a second engineer joins the project.
 #

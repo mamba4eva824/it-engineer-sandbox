@@ -30,7 +30,7 @@ You should see, in order:
 - The Okta activation email in `chris@ohmgym.com` (Gmail `+` aliasing routes `chris+priya@` here)
 - Priya's status flip from STAGED to PROVISIONED in Okta
 
-Click the activation link in the email → the **existing** `novatech-okta-hook` reactive Lambda (us-east-1) fires the per-user `✅ activated Okta` Slack post a few seconds later. That's the JML pipeline working end-to-end across both Lambdas.
+Click the activation link in the email → `ohmgym-activation-workflow` (reactive, us-west-1) fires the per-user `✅ activated Okta` Slack post a few seconds later. That's the JML pipeline working end-to-end across both Lambdas.
 
 ## Operator remediation — missed batch
 
