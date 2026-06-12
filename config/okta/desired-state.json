@@ -123,6 +123,11 @@
       "name": "access-gws",
       "description": "Members receive a Google Workspace / Cloud Identity account via Okta SCIM provisioning. Manual membership (not rule-driven).",
       "type": "OKTA_GROUP"
+    },
+    {
+      "name": "access-jml-audit",
+      "description": "GRC/Security read-only access to JML onboarding/offboarding DynamoDB audit tables via AWS IAM. Manual membership (not rule-driven).",
+      "type": "OKTA_GROUP"
     }
   ],
   "groupRules": [
