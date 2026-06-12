@@ -32,6 +32,8 @@ DYNAMODB_TABLES = (
     "ohmgym-offboarding-logs",
 )
 
+GRC_AUDIT_ROLE_NAME = "ohmgym-grc-jml-audit-read"
+
 LEGACY_PREFIX = "novatech-okta-hook/"
 
 
@@ -51,6 +53,11 @@ def lambda_client():
 @pytest.fixture(scope="module")
 def dynamodb_client():
     return boto3.client("dynamodb", region_name=WEST)
+
+
+@pytest.fixture(scope="module")
+def iam_client():
+    return boto3.client("iam")
 
 
 def test_ohmgym_jml_secrets_exist_in_us_west_1(secrets_client) -> None:
@@ -106,3 +113,23 @@ def test_audit_tables_in_us_west_1(dynamodb_client, table_name: str) -> None:
     desc = dynamodb_client.describe_table(TableName=table_name)
     assert desc["Table"]["TableName"] == table_name
     assert WEST in desc["Table"]["TableArn"]
+
+
+def test_grc_audit_role_deployed(iam_client) -> None:
+    role = iam_client.get_role(RoleName=GRC_AUDIT_ROLE_NAME)
+    assert role["Role"]["RoleName"] == GRC_AUDIT_ROLE_NAME
+
+
+def test_grc_audit_role_allows_read_not_write(dynamodb_client) -> None:
+    """Smoke test with admin creds: GRC role policy document scopes read actions only."""
+    iam = boto3.client("iam")
+    role = iam.get_role(RoleName=GRC_AUDIT_ROLE_NAME)["Role"]
+    policy = iam.get_role_policy(
+        RoleName=GRC_AUDIT_ROLE_NAME,
+        PolicyName="ohmgym-grc-jml-audit-dynamodb-read",
+    )
+    doc = policy["PolicyDocument"]
+    actions = {a for stmt in doc["Statement"] for a in stmt.get("Action", [])}
+    assert "dynamodb:Query" in actions
+    assert "dynamodb:PutItem" not in actions
+    assert GRC_AUDIT_ROLE_NAME in role["Arn"]

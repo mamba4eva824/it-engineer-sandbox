@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "exportedAt": "2026-06-11T00:00:00+00:00",
+  "awsAccountId": "430118826061",
+  "primaryRegion": "us-west-1",
+  "identityCenter": {
+    "enabled": false,
+    "verifiedAt": "2026-06-11",
+    "notes": "aws sso-admin list-instances returned [] in us-west-1 and us-east-1. Account is not in an AWS Organization. Path B (IAM Identity Center SSO) is deferred until Identity Center is enabled. Implemented Path C hybrid: standalone IAM role ohmgym-grc-jml-audit-read with optional SSO permission set in terraform/aws-grc-audit/sso.tf when identity_center_instance_arn is set.",
+    "portalUrl": null,
+    "issuerUrl": null,
+    "identityStoreId": null,
+    "identitySource": null
+  },
+  "grcJmlAudit": {
+    "accessPath": "C-hybrid",
+    "oktaGroup": "access-jml-audit",
+    "iamRoleName": "ohmgym-grc-jml-audit-read",
+    "iamRoleArn": "arn:aws:iam::430118826061:role/ohmgym-grc-jml-audit-read",
+    "assumePolicyArn": "arn:aws:iam::430118826061:policy/ohmgym-grc-jml-audit-assume",
+    "permissionSetName": "JMLAuditReadOnly",
+    "dynamodbTables": [
+      "ohmgym-onboarding-logs",
+      "ohmgym-offboarding-logs"
+    ],
+    "authorizedUsers": [
+      {
+        "email": "weinreichchris@gmail.com",
+        "displayName": "Bryan Wong",
+        "role": "GRC Analyst",
+        "notes": "Login/email is personal Gmail (Claude Desktop Google OAuth); first/last name are independent of login in Okta.",
+        "okta": true,
+        "identityCenter": false
+      }
+    ]
+  }
+}

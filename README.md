@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | [Reconcile reports](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | [AWS Scheduled Offboarding Workflow](public-docs/11-aws-scheduled-offboarding-workflow.md) | [GRC JML Audit Access](public-docs/12-grc-jml-audit-access.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 

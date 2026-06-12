@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and adjust. trusted_principal_arns defaults to the
+# caller identity when empty — set explicitly for repeatable applies.
+
+aws_region = "us-west-1"
+
+# IAM user or role allowed to assume ohmgym-grc-jml-audit-read
+trusted_principal_arns = [
+  "arn:aws:iam::430118826061:user/website-admin",
+]
+
+# Uncomment when IAM Identity Center is enabled (Path B upgrade):
+# identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-xxxxxxxxxxxx"
+# identity_store_id            = "d-xxxxxxxxxx"
+# sso_target_account_id        = "430118826061"
