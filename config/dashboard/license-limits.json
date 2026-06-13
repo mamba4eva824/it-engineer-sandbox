@@ -1,0 +1,20 @@
+{
+  "okta": {
+    "label": "Okta",
+    "purchased": 10
+  },
+  "gws_workspace": {
+    "label": "Google Workspace",
+    "productId": "Google-Apps",
+    "purchased": null
+  },
+  "gws_cloud_identity": {
+    "label": "Cloud Identity",
+    "productId": "101031",
+    "purchased": 50
+  },
+  "slack": {
+    "label": "Slack",
+    "purchased": 8
+  }
+}

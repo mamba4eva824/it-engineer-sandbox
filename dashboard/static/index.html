@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SaaS License Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>SaaS License Dashboard</h1>
+    <p class="subtitle">License allocation and JML pipeline visibility</p>
+  </header>
+
+  <main>
+    <section id="licenses-section">
+      <h2>License Allocation</h2>
+      <div id="license-cards" class="card-grid">
+        <p class="loading">Loading licenses…</p>
+      </div>
+      <p id="licenses-timestamp" class="timestamp"></p>
+    </section>
+
+    <section id="onboarding-section">
+      <h2>Onboarding Pipeline</h2>
+      <p class="section-desc">STAGED or PROVISIONED users with a start date</p>
+      <div id="onboarding-error" class="panel-error hidden"></div>
+      <div class="table-wrap">
+        <table id="onboarding-table">
+          <thead>
+            <tr>
+              <th data-sort="name">Name</th>
+              <th data-sort="email">Email</th>
+              <th data-sort="department">Department</th>
+              <th data-sort="roleTitle">Role</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="startDate">Start Date</th>
+              <th data-sort="daysUntilStart">Days Until</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="7" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="offboarding-section">
+      <h2>Offboarding Pipeline</h2>
+      <p class="section-desc">ACTIVE or PROVISIONED users with an end date</p>
+      <div id="offboarding-error" class="panel-error hidden"></div>
+      <div class="table-wrap">
+        <table id="offboarding-table">
+          <thead>
+            <tr>
+              <th data-sort="name">Name</th>
+              <th data-sort="email">Email</th>
+              <th data-sort="department">Department</th>
+              <th data-sort="status">Status</th>
+              <th data-sort="endDate">End Date</th>
+              <th data-sort="daysUntilEnd">Days Until</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="6" class="loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <button id="refresh-btn" type="button">Refresh</button>
+    <span id="refresh-status">Auto-refresh every 60s</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
