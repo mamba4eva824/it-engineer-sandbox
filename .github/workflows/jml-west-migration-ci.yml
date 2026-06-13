@@ -12,6 +12,8 @@ on:
       - 'lambdas/**'
       - 'terraform/**'
       - 'tests/**'
+      - 'dashboard/**'
+      - 'requirements.txt'
       - '.github/workflows/jml-west-migration-ci.yml'
       - '.github/workflows/*-workflow-ci.yml'
       - '.github/workflows/reactive-lambda-ci.yml'
@@ -22,6 +24,8 @@ on:
       - 'lambdas/**'
       - 'terraform/**'
       - 'tests/**'
+      - 'dashboard/**'
+      - 'requirements.txt'
       - '.github/workflows/jml-west-migration-ci.yml'
 
 concurrency:
@@ -40,6 +44,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install -r tests/requirements-dev.txt
           pip install -r lambdas/onboarding_workflow/requirements-dev.txt
           pip install -r lambdas/offboarding_workflow/requirements-dev.txt
