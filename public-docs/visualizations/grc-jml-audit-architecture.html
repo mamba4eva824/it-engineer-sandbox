@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRC Analyst Access to JML Audit Tables — Okta + AWS + Claude Desktop</title>
+<style>
+  :root{
+    --bg:#faf5ec; --panel:#fffdf8; --panel2:#f6efe1; --line:#e7dcc6;
+    --text:#3f362a; --muted:#85775f; --faint:#a3947a;
+    --okta:#2563eb; --awspink:#c2156f; --lambda:#e08700; --ddb:#7c3aed;
+    --iam:#d23b56; --claude:#c4633f; --person:#0d9488; --neutral:#857a66;
+    --green:#15803d; --amber:#b45309; --red:#dc2626; --cyan:#0e7490;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1480px;margin:0 auto;padding:22px 28px 40px}
+  header h1{margin:0;font-size:21px;letter-spacing:.2px}
+  header .sub{margin-top:5px;color:var(--muted);font-size:13px}
+  header .sub b{color:var(--text);font-weight:600}
+
+  .tabs{display:flex;gap:8px;margin:18px 0 12px}
+  .tab{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    padding:9px 18px;border-radius:9px;font-size:13.5px;cursor:pointer;font-weight:600}
+  .tab:hover{color:var(--text)}
+  .tab.active{background:#fff7e6;border-color:#d9b988;color:var(--text)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .panel.hidden{display:none}
+  svg{display:block;width:100%;height:auto;background:
+    radial-gradient(1100px 500px at 25% 0%,rgba(37,99,235,.045),transparent 60%),
+    radial-gradient(900px 500px at 85% 100%,rgba(196,99,63,.06),transparent 60%)}
+
+  /* ---------- diagram styling ---------- */
+  .lane-rect{fill:rgba(63,54,42,.025);stroke:#e3d5ba;stroke-width:1;rx:10}
+  .lane-label{fill:var(--faint);font-size:11px;font-weight:700;letter-spacing:2.2px}
+  .lane-badge-rect{rx:4}
+  .lane-badge-text{font-size:9.5px;font-weight:800;letter-spacing:1.2px}
+
+  .node{transition:opacity .35s ease,filter .35s ease;opacity:.93;cursor:default}
+  .node .nrect{fill:#fffefa;stroke-width:1.6;rx:10}
+  .node .ntitle{font-size:13px;font-weight:700;fill:var(--text)}
+  .node .nline{font-size:10.5px;fill:var(--muted)}
+  .node .nbadge-r{rx:4}
+  .node .nbadge-t{font-size:8.5px;font-weight:800;letter-spacing:1px;fill:#fffdf7}
+  .node.ghost .nrect{stroke-dasharray:5 5}
+  .node.ghost{opacity:.6}
+  .node.dim{opacity:.22;filter:saturate(.35)}
+  .node.lit{opacity:1;filter:drop-shadow(0 0 10px currentColor)}
+  .node.lit .nrect{stroke-width:2.4}
+
+  .edge{fill:none;stroke:#d3c5a6;stroke-width:1.6;opacity:.9;transition:opacity .3s}
+  .edge.dashed{stroke-dasharray:5 6}
+  .edge.active{stroke:currentColor;stroke-width:2.6;opacity:1;
+    stroke-dasharray:7 7;animation:dashflow .8s linear infinite}
+  @keyframes dashflow{to{stroke-dashoffset:-14}}
+
+  .packet-halo{opacity:.4}
+  .deny{animation:denyflash .9s ease-out forwards}
+  @keyframes denyflash{0%{opacity:0;transform:scale(.4)}25%{opacity:1;transform:scale(1.25)}
+    60%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.1)}}
+
+  /* ---------- narration bar ---------- */
+  .bar{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;
+    border-bottom:1px solid var(--line);padding:16px 22px 18px;background:var(--panel2);min-height:128px}
+  .bar-left{flex:1;min-width:0}
+  .actrow{display:flex;align-items:center;gap:10px}
+  .act{font-size:10px;font-weight:800;letter-spacing:1.6px;padding:4px 9px;border-radius:5px;
+    background:#f3e9d2;color:var(--okta)}
+  .counter{font-size:11px;color:var(--faint);font-weight:700;letter-spacing:1px}
+  .bar-left h2{margin:9px 0 5px;font-size:17px}
+  .bar-left p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.55;max-width:880px}
+  .chip{display:inline-block;margin-top:9px;background:#fbf4e2;border:1px solid #e3d2ac;
+    color:#9a4a12;font-size:12px;padding:6px 11px;border-radius:7px;
+    font-family:"SF Mono",ui-monospace,Menlo,monospace}
+  .chip.hidden{display:none}
+  .bar-right{display:flex;flex-direction:column;align-items:flex-end;gap:12px;padding-top:2px}
+  .controls{display:flex;gap:7px}
+  .controls button{background:#fffdf6;border:1px solid #dccfb2;color:var(--text);
+    font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
+  .controls button:hover{background:#f8f0dc}
+  .controls button.playing{background:#f3e3bd}
+  .dots{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:300px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#ded1b3;cursor:pointer;border:none;padding:0}
+  .dot.on{background:var(--okta);box-shadow:0 0 6px var(--okta)}
+  .dot.done{background:#c2ac82}
+
+  footer{margin-top:14px;color:var(--faint);font-size:11.5px;
+    font-family:"SF Mono",ui-monospace,Menlo,monospace;letter-spacing:.2px}
+  footer .sep{margin:0 7px;color:#2c3a52}
+  .hint{color:var(--faint);font-size:11.5px;margin-top:6px}
+  kbd{background:#f5edd7;border:1px solid #ddcfae;border-radius:4px;padding:1px 6px;
+    font-size:10.5px;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GRC Analyst Access to JML Audit Tables</h1>
+    <div class="sub">NovaTech / <b>ohmgym</b> sandbox &nbsp;·&nbsp; <b>Okta</b> governs identity &nbsp;·&nbsp; <b>AWS IAM</b> enforces least privilege &nbsp;·&nbsp; <b>Claude Desktop</b> is the query surface</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="t1">① Full Story — Current Implementation</button>
+    <button class="tab" data-tab="t2">② Access Paths — Ideal vs Current</button>
+  </div>
+
+  <section class="panel" id="panel-t1">
+    <div class="bar">
+      <div class="bar-left">
+        <div class="actrow"><span class="act" id="t1-act"></span><span class="counter" id="t1-counter"></span></div>
+        <h2 id="t1-title"></h2>
+        <p id="t1-caption"></p>
+        <code class="chip hidden" id="t1-chip"></code>
+      </div>
+      <div class="bar-right">
+        <div class="controls">
+          <button id="t1-reset" title="Reset">⟲ Reset</button>
+          <button id="t1-prev" title="Previous step">◀ Prev</button>
+          <button id="t1-play" title="Auto-play">▶ Play</button>
+          <button id="t1-next" title="Next step">Next ▶</button>
+        </div>
+        <div class="dots" id="t1-dots"></div>
+      </div>
+    </div>
+    <svg id="svg-t1" viewBox="0 0 1400 790" xmlns="http://www.w3.org/2000/svg"></svg>
+  </section>
+
+  <section class="panel hidden" id="panel-t2">
+    <div class="bar">
+      <div class="bar-left">
+        <div class="actrow"><span class="act" id="t2-act"></span><span class="counter" id="t2-counter"></span></div>
+        <h2 id="t2-title"></h2>
+        <p id="t2-caption"></p>
+        <code class="chip hidden" id="t2-chip"></code>
+      </div>
+      <div class="bar-right">
+        <div class="controls">
+          <button id="t2-reset" title="Reset">⟲ Reset</button>
+          <button id="t2-prev" title="Previous step">◀ Prev</button>
+          <button id="t2-play" title="Auto-play">▶ Play</button>
+          <button id="t2-next" title="Next step">Next ▶</button>
+        </div>
+        <div class="dots" id="t2-dots"></div>
+      </div>
+    </div>
+    <svg id="svg-t2" viewBox="0 0 1400 810" xmlns="http://www.w3.org/2000/svg"></svg>
+  </section>
+
+  <div class="hint">Keyboard: <kbd>←</kbd> / <kbd>→</kbd> step &nbsp;·&nbsp; <kbd>space</kbd> play / pause</div>
+  <footer>terraform/aws-grc-audit/<span class="sep">·</span>config/okta/desired-state.json<span class="sep">·</span>scripts/grc/query_jml_audit.py<span class="sep">·</span>public-docs/12-grc-jml-audit-access.md</footer>
+</div>
+
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const C = {
+  okta:"#2563eb", eb:"#c2156f", lambda:"#e08700", ddb:"#7c3aed", iam:"#d23b56",
+  claude:"#c4633f", person:"#0d9488", neutral:"#857a66", green:"#15803d",
+  amber:"#b45309", red:"#dc2626", cyan:"#0e7490"
+};
+
+function el(name, attrs, parent){
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function txt(node, s){ node.textContent = s; return node; }
+
+function anchor(n, a){
+  const f = (a && a.f !== undefined) ? a.f : 0.5;
+  switch (a ? a.side : "right"){
+    case "left":   return {x:n.x,        y:n.y + n.h*f, nx:-1, ny:0};
+    case "right":  return {x:n.x + n.w,  y:n.y + n.h*f, nx:1,  ny:0};
+    case "top":    return {x:n.x + n.w*f, y:n.y,        nx:0,  ny:-1};
+    case "bottom": return {x:n.x + n.w*f, y:n.y + n.h,  nx:0,  ny:1};
+  }
+}
+function edgePath(n1, a1, n2, a2){
+  const p1 = anchor(n1, a1), p2 = anchor(n2, a2);
+  const d = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  const k = Math.min(Math.max(40, d * 0.42), 150);
+  return `M ${p1.x} ${p1.y} C ${p1.x + p1.nx*k} ${p1.y + p1.ny*k}, ${p2.x + p2.nx*k} ${p2.y + p2.ny*k}, ${p2.x} ${p2.y}`;
+}
+
+function buildScene(cfg){
+  const svg = document.getElementById("svg-" + cfg.key);
+  const laneG = el("g", {}, svg), edgeG = el("g", {}, svg),
+        nodeG = el("g", {}, svg), overlay = el("g", {}, svg);
+
+  // lanes / channels
+  for (const L of cfg.lanes){
+    el("rect", {class:"lane-rect", x:L.x, y:L.y, width:L.w, height:L.h, rx:10}, laneG);
+    txt(el("text", {class:"lane-label", x:L.x+16, y:L.y+22}, laneG), L.label);
+    if (L.badge){
+      const bw = L.badge.length*7.6 + 20;
+      // badgeBottom avoids colliding with the lane label on narrow channel rects
+      const by = L.badgeBottom ? L.y + L.h - 27 : L.y + 9;
+      el("rect", {class:"lane-badge-rect", x:L.x+L.w-bw-12, y:by, width:bw, height:18,
+        fill:L.badgeColor, opacity:.92, rx:4}, laneG);
+      txt(el("text", {class:"lane-badge-text", x:L.x+L.w-bw-12+10, y:by+13, fill:"#fffdf7"}, laneG), L.badge);
+    }
+  }
+
+  // edges
+  const nodeMap = {}; cfg.nodes.forEach(n => nodeMap[n.id] = n);
+  const edgeMap = {};
+  for (const e of cfg.edges){
+    const d = e.d || edgePath(nodeMap[e.from], e.fa, nodeMap[e.to], e.ta);
+    const p = el("path", {class:"edge" + (e.dashed ? " dashed":""), d, id:`${cfg.key}-edge-${e.id}`}, edgeG);
+    p.style.color = e.color;
+    edgeMap[e.id] = {cfg:e, path:p};
+  }
+
+  // nodes
+  for (const n of cfg.nodes){
+    const g = el("g", {class:"node" + (n.ghost ? " ghost":""), id:`${cfg.key}-${n.id}`}, nodeG);
+    g.style.color = n.color;
+    el("rect", {class:"nrect", x:n.x, y:n.y, width:n.w, height:n.h, rx:10, stroke:n.color}, g);
+    el("rect", {x:n.x, y:n.y, width:4, height:n.h, rx:2, fill:n.color, opacity:.85}, g);
+    txt(el("text", {class:"ntitle", x:n.x+16, y:n.y+24}, g), n.title);
+    (n.lines || []).forEach((s,i) => txt(el("text", {class:"nline", x:n.x+16, y:n.y+42+i*15}, g), s));
+    if (n.badge){
+      const bw = n.badge.length*6.8 + 16;
+      // badge sits on the node's top border so it never collides with the title
+      el("rect", {class:"nbadge-r", x:n.x+n.w-bw-10, y:n.y-9, width:bw, height:16, fill:n.color, rx:4}, g);
+      txt(el("text", {class:"nbadge-t", x:n.x+n.w-bw-10+8, y:n.y+3}, g), n.badge);
+    }
+  }
+
+  const scene = {
+    key:cfg.key, steps:cfg.steps, nodes:cfg.nodes, edgeMap, overlay, svg,
+    idx:0, token:0, playing:false, playTimer:null,
+    ui:{
+      act:document.getElementById(cfg.key+"-act"),
+      counter:document.getElementById(cfg.key+"-counter"),
+      title:document.getElementById(cfg.key+"-title"),
+      caption:document.getElementById(cfg.key+"-caption"),
+      chip:document.getElementById(cfg.key+"-chip"),
+      dots:document.getElementById(cfg.key+"-dots"),
+      play:document.getElementById(cfg.key+"-play")
+    }
+  };
+
+  // step dots
+  cfg.steps.forEach((_, i) => {
+    const d = document.createElement("button");
+    d.className = "dot"; d.title = "Step " + (i+1);
+    d.addEventListener("click", () => { stopPlay(scene); setStep(scene, i); });
+    scene.ui.dots.appendChild(d);
+  });
+
+  document.getElementById(cfg.key+"-next").addEventListener("click", () => { stopPlay(scene); setStep(scene, scene.idx+1); });
+  document.getElementById(cfg.key+"-prev").addEventListener("click", () => { stopPlay(scene); setStep(scene, scene.idx-1); });
+  document.getElementById(cfg.key+"-reset").addEventListener("click", () => { stopPlay(scene); setStep(scene, 0); });
+  scene.ui.play.addEventListener("click", () => scene.playing ? stopPlay(scene) : startPlay(scene));
+
+  setStep(scene, 0);
+  return scene;
+}
+
+function setStep(scene, i){
+  scene.idx = Math.max(0, Math.min(scene.steps.length-1, i));
+  const step = scene.steps[scene.idx];
+  scene.token++;                                  // cancels running packet loops
+
+  // narration
+  txt(scene.ui.act, step.act);
+  scene.ui.act.style.color = step.actColor || "var(--okta)";
+  txt(scene.ui.counter, `STEP ${scene.idx+1} / ${scene.steps.length}`);
+  txt(scene.ui.title, step.title);
+  txt(scene.ui.caption, step.caption);
+  scene.ui.chip.classList.toggle("hidden", !step.chip);
+  if (step.chip) txt(scene.ui.chip, step.chip);
+
+  // dots
+  [...scene.ui.dots.children].forEach((d, j) => {
+    d.classList.toggle("on", j === scene.idx);
+    d.classList.toggle("done", j < scene.idx);
+  });
+
+  // node focus
+  const focus = new Set(step.focus || []);
+  for (const n of scene.nodes){
+    const g = document.getElementById(`${scene.key}-${n.id}`);
+    g.classList.toggle("dim", focus.size > 0 && !focus.has(n.id));
+    g.classList.toggle("lit", focus.has(n.id));
+  }
+
+  // edge activation = edges carrying packets + extras
+  const active = new Set((step.packets || []).map(p => p.edge).concat(step.edges || []));
+  for (const id in scene.edgeMap)
+    scene.edgeMap[id].path.classList.toggle("active", active.has(id));
+
+  scene.overlay.replaceChildren();
+  runPackets(scene);
+}
+
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+const ease = t => t < .5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2;
+
+async function runPackets(scene){
+  const specs = scene.steps[scene.idx].packets || [];
+  if (!specs.length) return;
+  const tok = scene.token;
+  while (tok === scene.token){
+    for (const p of specs){
+      if (tok !== scene.token) return;
+      await animatePacket(scene, p, tok);
+    }
+    await wait(750);
+  }
+}
+
+function animatePacket(scene, spec, tok){
+  return new Promise(resolve => {
+    const e = scene.edgeMap[spec.edge];
+    if (!e) return resolve();
+    const path = e.path, L = path.getTotalLength();
+    const color = spec.color || e.cfg.color;
+    const g = el("g", {}, scene.overlay);
+    el("circle", {class:"packet-halo", r:9, fill:color}, g);
+    const core = el("circle", {r:4.2, fill:color, stroke:"#fffdf7", "stroke-width":1.4}, g);
+    const dur = spec.dur || 1250;
+    const blockAt = spec.blocked ? 0.56 : 1;
+    let start = null, denied = false;
+
+    function place(t){
+      const f = spec.rev ? 1 - t : t;
+      const pt = path.getPointAtLength(f * L);
+      g.setAttribute("transform", `translate(${pt.x},${pt.y})`);
+      return pt;
+    }
+    function frame(now){
+      if (tok !== scene.token){ g.remove(); return resolve(); }
+      if (start === null) start = now;
+      const elapsed = now - start;
+
+      if (!spec.blocked){
+        const t = Math.min(1, elapsed / dur);
+        place(ease(t));
+        if (t >= 1){ g.remove(); return resolve(); }
+        return requestAnimationFrame(frame);
+      }
+      // blocked: travel out, flash deny, bounce back
+      const outDur = dur * 0.6, backDur = dur * 0.55;
+      if (elapsed <= outDur){
+        place(ease(elapsed / outDur) * blockAt);
+        return requestAnimationFrame(frame);
+      }
+      if (!denied){
+        denied = true;
+        const pt = place(blockAt);
+        showDeny(scene, pt.x, pt.y);
+        g.querySelector(".packet-halo").setAttribute("fill", C.red);
+        core.setAttribute("fill", C.red);
+      }
+      const t2 = Math.min(1, (elapsed - outDur) / backDur);
+      place(blockAt * (1 - ease(t2)));
+      if (t2 >= 1){ g.remove(); return resolve(); }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+function showDeny(scene, x, y){
+  const g = el("g", {class:"deny", transform:`translate(${x},${y})`,
+    style:"transform-origin:"+x+"px "+y+"px"}, scene.overlay);
+  el("circle", {r:14, fill:"none", stroke:C.red, "stroke-width":2.5}, g);
+  el("line", {x1:-6, y1:-6, x2:6, y2:6, stroke:C.red, "stroke-width":2.5, "stroke-linecap":"round"}, g);
+  el("line", {x1:6, y1:-6, x2:-6, y2:6, stroke:C.red, "stroke-width":2.5, "stroke-linecap":"round"}, g);
+  txt(el("text", {x:0, y:-22, "text-anchor":"middle", fill:C.red,
+    style:"font-size:10px;font-weight:800;letter-spacing:.5px"}, g), "AccessDeniedException");
+  setTimeout(() => g.remove(), 950);
+}
+
+function startPlay(scene){
+  scene.playing = true;
+  scene.ui.play.textContent = "⏸ Pause";
+  scene.ui.play.classList.add("playing");
+  const tick = () => {
+    scene.playTimer = setTimeout(() => {
+      if (!scene.playing) return;
+      if (scene.idx >= scene.steps.length - 1){ stopPlay(scene); return; }
+      setStep(scene, scene.idx + 1);
+      tick();
+    }, 4500);
+  };
+  tick();
+}
+function stopPlay(scene){
+  scene.playing = false;
+  clearTimeout(scene.playTimer);
+  scene.ui.play.textContent = "▶ Play";
+  scene.ui.play.classList.remove("playing");
+}
+
+/* ================================================================
+   TAB 1 — FULL STORY (current implementation, Path C-hybrid live)
+   ================================================================ */
+const T1 = {
+  key:"t1",
+  lanes:[
+    {x:20, y:22,  w:1360, h:172, label:"OKTA — INTEGRATOR-2367542.OKTA.COM", badge:"IDENTITY + GOVERNANCE", badgeColor:C.okta},
+    {x:20, y:210, w:1360, h:340, label:"AWS — ACCOUNT 430118826061 · US-WEST-1", badge:"ENFORCEMENT", badgeColor:C.iam},
+    {x:20, y:566, w:1360, h:200, label:"ANALYST WORKSTATION", badge:"QUERY SURFACE", badgeColor:C.claude}
+  ],
+  nodes:[
+    {id:"okta_api",  x:60,   y:70,  w:230, h:100, color:C.okta,    title:"Okta API",
+      lines:["Management API","Private Key JWT (M2M)"]},
+    {id:"okta_group",x:1040, y:62,  w:300, h:112, color:C.okta,    title:"access-jml-audit",
+      lines:["Member: Bryan Wong — GRC Analyst","weinreichchris@gmail.com","manual membership"], badge:"CONFIG-AS-CODE"},
+    {id:"eb_on",     x:60,   y:252, w:180, h:74,  color:C.eb,      title:"EventBridge",
+      lines:["daily · 9:00 AM PT","onboarding schedule"]},
+    {id:"lam_on",    x:300,  y:252, w:200, h:74,  color:C.lambda,  title:"Lambda — onboard",
+      lines:["terraform/aws-onboarding","activates same-day joiners"]},
+    {id:"ddb_on",    x:560,  y:252, w:250, h:74,  color:C.ddb,     title:"ohmgym-onboarding-logs",
+      lines:["DynamoDB · (run_date, user_id)"], badge:"TTL 90d"},
+    {id:"eb_off",    x:60,   y:452, w:180, h:74,  color:C.eb,      title:"EventBridge",
+      lines:["daily · 5:00 PM PT","offboarding schedule"]},
+    {id:"lam_off",   x:300,  y:452, w:200, h:74,  color:C.lambda,  title:"Lambda — offboard",
+      lines:["terraform/aws-offboarding","deactivates same-day leavers"]},
+    {id:"ddb_off",   x:560,  y:452, w:250, h:74,  color:C.ddb,     title:"ohmgym-offboarding-logs",
+      lines:["DynamoDB · (run_date, user_id)"], badge:"TTL 90d"},
+    {id:"iam",       x:880,  y:246, w:300, h:96,  color:C.iam,     title:"IAM ohmgym-grc-jml-audit-read",
+      lines:["Allow: Query · Scan · GetItem ·","BatchGetItem · DescribeTable","on the two audit tables only"], badge:"TERRAFORM"},
+    {id:"sts",       x:880,  y:436, w:220, h:70,  color:C.iam,     title:"AWS STS",
+      lines:["sts:AssumeRole · session grc-test"]},
+    {id:"bryan",     x:1090, y:606, w:250, h:120, color:C.person,  title:"Bryan Wong",
+      lines:["GRC Analyst","weinreichchris@gmail.com"], badge:"PERSONA"},
+    {id:"claude",    x:790,  y:606, w:240, h:120, color:C.claude,  title:"Claude Desktop",
+      lines:["Google OAuth:","weinreichchris@gmail.com"]},
+    {id:"mcp",       x:470,  y:606, w:260, h:120, color:C.claude,  title:"AWS API MCP server",
+      lines:["awslabs.aws-api-mcp-server","AWS_API_MCP_PROFILE_NAME =","ohmgym-grc-jml-audit"], badge:"uvx"},
+    {id:"profile",   x:130,  y:606, w:280, h:120, color:C.neutral, title:"~/.aws/config",
+      lines:["[profile ohmgym-grc-jml-audit]","role_arn = …grc-jml-audit-read","source_profile = default"]}
+  ],
+  edges:[
+    {id:"e_eb_on",      from:"eb_on",  fa:{side:"right"}, to:"lam_on",  ta:{side:"left"},  color:C.eb},
+    {id:"e_lam_okta",   from:"lam_on", fa:{side:"top"},   to:"okta_api",ta:{side:"bottom",f:0.5}, color:C.okta},
+    {id:"e_lam_ddb",    from:"lam_on", fa:{side:"right"}, to:"ddb_on",  ta:{side:"left"},  color:C.ddb},
+    {id:"e_eb_off",     from:"eb_off", fa:{side:"right"}, to:"lam_off", ta:{side:"left"},  color:C.eb},
+    {id:"e_lamoff_okta",from:"lam_off",to:"okta_api", color:C.okta,
+      d:"M 360 452 C 360 392, 252 402, 252 330 C 252 252, 198 248, 198 170"},
+    {id:"e_lamoff_ddb", from:"lam_off",fa:{side:"right"}, to:"ddb_off", ta:{side:"left"},  color:C.ddb},
+    {id:"e_gov",        from:"okta_group", fa:{side:"bottom",f:0.6}, to:"bryan", ta:{side:"top",f:0.5}, color:C.okta},
+    {id:"e_conv",       from:"okta_group", fa:{side:"bottom",f:0.2},  to:"iam",   ta:{side:"top",f:0.7}, color:C.amber, dashed:true},
+    {id:"e_ask",        from:"bryan",  fa:{side:"left"},  to:"claude",  ta:{side:"right"}, color:C.person},
+    {id:"e_route",      from:"claude", fa:{side:"left"},  to:"mcp",     ta:{side:"right"}, color:C.claude},
+    {id:"e_prof",       from:"mcp",    fa:{side:"left"},  to:"profile", ta:{side:"right"}, color:C.neutral},
+    {id:"e_assume",     from:"mcp",    to:"sts",          color:C.iam,
+      d:"M 715 606 C 715 556, 845 596, 845 546 C 845 516, 872 506, 898 506"},
+    {id:"e_sts_iam",    from:"sts",    fa:{side:"top",f:0.5}, to:"iam", ta:{side:"bottom",f:0.4}, color:C.iam},
+    {id:"e_q_on",       from:"mcp",    to:"ddb_on",       color:C.ddb,
+      d:"M 530 606 C 530 545, 529 515, 533 468 C 537 420, 564 388, 600 326"},
+    {id:"e_q_off",      from:"mcp",    fa:{side:"top",f:0.45}, to:"ddb_off", ta:{side:"bottom",f:0.3}, color:C.ddb}
+  ],
+  steps:[
+    {act:"OVERVIEW", actColor:C.okta,
+     title:"GRC audit access at a glance",
+     caption:"Three planes: Okta is identity and governance, AWS is enforcement, and Claude Desktop is the analyst's query surface. JML Lambdas write audit tables; a GRC analyst reads them — with no IT-Ops admin credentials, no Okta API secrets, and no write path."},
+    {act:"ACT 1 · WRITE PATH", actColor:C.eb,
+     title:"9:00 AM PT — the onboarding run fires",
+     caption:"An EventBridge schedule triggers the onboarding Lambda every morning. The JML automation runs on rails — no human kicks it off.",
+     focus:["eb_on","lam_on"], packets:[{edge:"e_eb_on"}]},
+    {act:"ACT 1 · WRITE PATH", actColor:C.eb,
+     title:"Lambda activates today's joiners in Okta",
+     caption:"The Lambda authenticates to the Okta Management API (Private Key JWT) and GETs accounts in STAGED or PROVISIONED status, searching on each user's start_date attribute. Only users whose start date matches today's run are activated — Okta sends the activation email to the user's email attribute. Each response status becomes part of the audit record.",
+     chip:"GET /api/v1/users?search=profile.start_date eq \"2026-06-12\" and (status eq \"STAGED\" or status eq \"PROVISIONED\")",
+     focus:["lam_on","okta_api"], packets:[{edge:"e_lam_okta"},{edge:"e_lam_okta", rev:true, color:C.green},{edge:"e_lam_okta"}]},
+    {act:"ACT 1 · WRITE PATH", actColor:C.eb,
+     title:"One audit row per (run_date, user_id)",
+     caption:"Each result is written to ohmgym-onboarding-logs: status, department, role title, Okta response code, batch run ID. A 90-day DynamoDB TTL purges rows automatically — retention is enforced by the table, not by policy documents.",
+     focus:["lam_on","ddb_on"], packets:[{edge:"e_lam_ddb"},{edge:"e_lam_ddb"}]},
+    {act:"ACT 1 · WRITE PATH", actColor:C.eb,
+     title:"5:00 PM PT — the offboarding mirror",
+     caption:"The same pattern runs in reverse at end of day: EventBridge fires the offboarding Lambda, which GETs ACTIVE accounts searching on each user's end_date attribute. Only users whose end date matches today's run are deactivated, and every result is written to ohmgym-offboarding-logs. Two tables now hold the full joiner/leaver audit trail.",
+     chip:"GET /api/v1/users?search=profile.end_date eq \"2026-06-12\" and status eq \"ACTIVE\"",
+     focus:["eb_off","lam_off","okta_api","ddb_off"],
+     packets:[{edge:"e_eb_off"},{edge:"e_lamoff_okta"},{edge:"e_lamoff_okta", rev:true, color:C.green},{edge:"e_lamoff_ddb"}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.claude,
+     title:"Governance first: the access-jml-audit group",
+     caption:"Bryan Wong (GRC Analyst) is gated by the access-jml-audit Okta group — declared in config/okta/desired-state.json and applied with reconcile_config.py. The group is the governance record of who may read; the dashed amber link to the IAM role is by email convention (more on that in Tab ②).",
+     focus:["okta_group","bryan"], edges:["e_conv"], packets:[{edge:"e_gov"}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.claude,
+     title:"Bryan asks Claude Desktop a question",
+     caption:"He signs into Claude Desktop with the same Google identity as his Okta login, and asks in plain English — no console, no SQL, no CLI flags.",
+     chip:"Query ohmgym-onboarding-logs for run_date 2026-06-12 in us-west-1.",
+     focus:["bryan","claude"], packets:[{edge:"e_ask"}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.claude,
+     title:"Claude routes the request to the AWS API MCP server",
+     caption:"Claude Desktop is configured with awslabs.aws-api-mcp-server (launched via uvx), pinned to region us-west-1 and to one named AWS profile. The model translates the question into a DynamoDB API call.",
+     focus:["claude","mcp"], packets:[{edge:"e_route"}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.claude,
+     title:"The MCP server resolves an assume-role profile",
+     caption:"Profile ohmgym-grc-jml-audit in ~/.aws/config doesn't hold credentials of its own — it names the role ARN to assume. The analyst never touches long-lived keys for the GRC role.",
+     focus:["mcp","profile"], packets:[{edge:"e_prof"},{edge:"e_prof", rev:true, color:C.green}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.iam,
+     title:"STS AssumeRole → temporary, scoped credentials",
+     caption:"STS issues short-lived credentials for ohmgym-grc-jml-audit-read (session: grc-test). The role and its inline policy are Terraform-managed in terraform/aws-grc-audit/ — 3 resources, fully reviewable in code.",
+     focus:["mcp","sts","iam"],
+     packets:[{edge:"e_assume"},{edge:"e_sts_iam"},{edge:"e_assume", rev:true, color:C.green}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.ddb,
+     title:"Read-only query against the audit tables",
+     caption:"The inline policy allows exactly five actions — Query, Scan, GetItem, BatchGetItem, DescribeTable — on exactly two table ARNs. No Secrets Manager, no Lambda, no dynamodb:* wildcard.",
+     focus:["mcp","iam","ddb_on","ddb_off"],
+     packets:[{edge:"e_q_on"},{edge:"e_q_off"}]},
+    {act:"ACT 2 · READ PATH (C-HYBRID · LIVE)", actColor:C.green,
+     title:"Rows return — Claude answers in plain English",
+     caption:"The audit rows flow back through the MCP server and Claude summarizes them: which joiners succeeded, which runs errored, which departments were touched. GRC gets answers, not access keys.",
+     focus:["ddb_on","mcp","claude","bryan"],
+     packets:[{edge:"e_q_on", rev:true, color:C.green},{edge:"e_route", rev:true, color:C.green},{edge:"e_ask", rev:true, color:C.green}]},
+    {act:"ACT 2 · SECURITY BEAT", actColor:C.red,
+     title:"And if Claude tries to write? Denied.",
+     caption:"PutItem under the GRC role returns AccessDeniedException — validated live, and asserted in tests/integration/test_jml_aws_live.py. Combined with the 90-day TTL, GRC can only ever read the retained history.",
+     focus:["mcp","iam","ddb_off"],
+     packets:[{edge:"e_q_off", blocked:true, color:C.red}]}
+  ]
+};
+
+/* ================================================================
+   TAB 2 — ACCESS PATHS: IDEAL (A/B) vs CURRENT (C-HYBRID)
+   ================================================================ */
+const T2 = {
+  key:"t2",
+  lanes:[
+    {x:20,  y:20,  w:1360, h:160, label:"OKTA — IDENTITY + GOVERNANCE", badge:"SOURCE OF TRUTH", badgeColor:C.okta},
+    {x:40,  y:200, w:360,  h:350, label:"PATH A — OKTA SAML FEDERATION", badge:"DEFERRED · IDEAL", badgeColor:C.okta, badgeBottom:true},
+    {x:480, y:200, w:360,  h:350, label:"PATH B — IDENTITY CENTER SSO", badge:"TF READY · BLOCKED", badgeColor:C.cyan, badgeBottom:true},
+    {x:960, y:200, w:400,  h:350, label:"PATH C — HYBRID", badge:"LIVE", badgeColor:C.green, badgeBottom:true},
+    {x:20,  y:570, w:1360, h:220, label:"AWS — ENFORCEMENT · 430118826061 · US-WEST-1", badge:"TERRAFORM", badgeColor:C.iam}
+  ],
+  nodes:[
+    {id:"okta_group2", x:520, y:50, w:360, h:110, color:C.okta, title:"Okta — access-jml-audit",
+      lines:["Bryan Wong · GRC Analyst","weinreichchris@gmail.com","config-as-code group"], badge:"GOVERNANCE"},
+    // Path A (ghost)
+    {id:"samlA", x:70, y:250, w:300, h:64, color:C.okta, ghost:true, title:"Okta SAML app → AWS",
+      lines:["assertion carries group membership"]},
+    {id:"idcA",  x:70, y:344, w:300, h:64, color:C.okta, ghost:true, title:"IAM Identity Center",
+      lines:["external IdP: Okta"]},
+    {id:"psA",   x:70, y:438, w:300, h:64, color:C.okta, ghost:true, title:"Permission set",
+      lines:["JMLAuditReadOnly"]},
+    // Path B (ghost)
+    {id:"idcB",  x:510, y:300, w:300, h:64, color:C.cyan, ghost:true, title:"IAM Identity Center SSO",
+      lines:["sso.tf · instance not enabled"]},
+    {id:"psB",   x:510, y:430, w:300, h:64, color:C.cyan, ghost:true, title:"JMLAuditReadOnly + user",
+      lines:["Identity Store: grc_analyst"]},
+    // Path C (live)
+    {id:"bryanC", x:990, y:246, w:340, h:70, color:C.claude, title:"Bryan Wong → Claude Desktop",
+      lines:["Google OAuth: same Gmail as Okta login"]},
+    {id:"mcpC",   x:990, y:346, w:340, h:70, color:C.claude, title:"AWS API MCP server",
+      lines:["profile ohmgym-grc-jml-audit"]},
+    {id:"stsC",   x:990, y:446, w:340, h:64, color:C.iam, title:"STS AssumeRole",
+      lines:["temporary scoped credentials"]},
+    // shared enforcement
+    {id:"iam2", x:520, y:588, w:360, h:78, color:C.iam, title:"IAM ohmgym-grc-jml-audit-read",
+      lines:["read-only on the two audit tables"], badge:"TERRAFORM"},
+    {id:"ddb2", x:520, y:696, w:360, h:74, color:C.ddb, title:"DynamoDB audit tables",
+      lines:["onboarding-logs · offboarding-logs"], badge:"TTL 90d"}
+  ],
+  edges:[
+    {id:"a1", from:"okta_group2", fa:{side:"left"},  to:"samlA", ta:{side:"top"},   color:C.okta, dashed:true},
+    {id:"a2", from:"samlA", fa:{side:"bottom"}, to:"idcA",  ta:{side:"top"},   color:C.okta, dashed:true},
+    {id:"a3", from:"idcA",  fa:{side:"bottom"}, to:"psA",   ta:{side:"top"},   color:C.okta, dashed:true},
+    {id:"a4", from:"psA",   fa:{side:"bottom"}, to:"iam2",  ta:{side:"left"},  color:C.okta, dashed:true},
+    {id:"b1", from:"okta_group2", fa:{side:"bottom",f:0.5}, to:"idcB", ta:{side:"top"}, color:C.cyan, dashed:true},
+    {id:"b2", from:"idcB",  fa:{side:"bottom"}, to:"psB",   ta:{side:"top"},   color:C.cyan, dashed:true},
+    {id:"b3", from:"psB",   fa:{side:"bottom"}, to:"iam2",  ta:{side:"top",f:0.2}, color:C.cyan, dashed:true},
+    {id:"c1", from:"okta_group2", fa:{side:"right"}, to:"bryanC", ta:{side:"top"}, color:C.claude},
+    {id:"c2", from:"bryanC",fa:{side:"bottom"}, to:"mcpC",  ta:{side:"top"},   color:C.claude},
+    {id:"c3", from:"mcpC",  fa:{side:"bottom"}, to:"stsC",  ta:{side:"top"},   color:C.iam},
+    {id:"c4", from:"stsC",  fa:{side:"bottom"}, to:"iam2",  ta:{side:"right"}, color:C.iam},
+    {id:"gap",from:"okta_group2", fa:{side:"bottom",f:0.95}, to:"iam2", ta:{side:"top",f:0.95}, color:C.amber, dashed:true},
+    {id:"d1", from:"iam2",  fa:{side:"bottom"}, to:"ddb2",  ta:{side:"top"},   color:C.ddb}
+  ],
+  steps:[
+    {act:"OVERVIEW", actColor:C.okta,
+     title:"Three candidate access paths, one enforcement point",
+     caption:"Every path ends at the same Terraform-managed IAM role and the same two DynamoDB tables. What differs is how Okta governance connects to AWS enforcement: Path A is the ideal (SAML federation), Path B is Terraform-ready but blocked, Path C-hybrid is what's live today."},
+    {act:"PATH A · IDEAL (DEFERRED)", actColor:C.okta,
+     title:"Okta SAML → IAM Identity Center federation",
+     caption:"In the ideal state, Okta is the external IdP for Identity Center. The SAML assertion carries group membership, Identity Center maps it to the JMLAuditReadOnly permission set, and removing Bryan from access-jml-audit removes his AWS access instantly. Governance IS enforcement — no convention, no gap.",
+     focus:["okta_group2","samlA","idcA","psA","iam2"],
+     packets:[{edge:"a1"},{edge:"a2"},{edge:"a3"},{edge:"a4"}]},
+    {act:"PATH B · TERRAFORM READY (BLOCKED)", actColor:C.cyan,
+     title:"Identity Center SSO — built, waiting on a flag",
+     caption:"sso.tf already defines the JMLAuditReadOnly permission set, an Identity Store user, and the account assignment — all conditional. It's blocked because sandbox account 430118826061 isn't in an AWS Organization, so Identity Center can't be enabled. Activation is one variable: identity_center_instance_arn.",
+     focus:["okta_group2","idcB","psB","iam2"],
+     packets:[{edge:"b1"},{edge:"b2"},{edge:"b3"}]},
+    {act:"PATH C · LIVE TODAY", actColor:C.green,
+     title:"C-hybrid, step 1 — Okta gates the human",
+     caption:"With federation unavailable, Okta still governs: only access-jml-audit members get the AWS profile. Bryan's Okta login and his Claude Desktop Google OAuth are the same Gmail — that email is the identity link between the two worlds.",
+     focus:["okta_group2","bryanC"], packets:[{edge:"c1"}]},
+    {act:"PATH C · LIVE TODAY", actColor:C.green,
+     title:"C-hybrid, step 2 — natural language becomes an API call",
+     caption:"Bryan asks Claude Desktop a question; the AWS API MCP server turns it into a DynamoDB call under the ohmgym-grc-jml-audit profile. The analyst experience is conversational, the plumbing is standard AWS SDK.",
+     chip:"Scan the first 10 rows from ohmgym-offboarding-logs.",
+     focus:["bryanC","mcpC"], packets:[{edge:"c2"}]},
+    {act:"PATH C · LIVE TODAY", actColor:C.iam,
+     title:"C-hybrid, step 3 — STS AssumeRole into the read role",
+     caption:"The profile names the role ARN; STS issues temporary credentials for ohmgym-grc-jml-audit-read. No long-lived keys for the GRC role, and every session is visible in CloudTrail as an AssumeRole event.",
+     focus:["mcpC","stsC","iam2"], packets:[{edge:"c3"},{edge:"c4"}]},
+    {act:"PATH C · LIVE TODAY", actColor:C.ddb,
+     title:"C-hybrid, step 4 — scoped read, nothing else",
+     caption:"Query/Scan/GetItem/BatchGetItem/DescribeTable on two named table ARNs. Writes return AccessDeniedException (validated live), and the 90-day TTL bounds what history GRC can ever see.",
+     focus:["iam2","ddb2"],
+     packets:[{edge:"d1"},{edge:"d1", rev:true, color:C.green}]},
+    {act:"THE HONEST GAP", actColor:C.amber,
+     title:"Governance vs enforcement — and the upgrade path",
+     caption:"In C-hybrid, the Okta group and the IAM role are linked by email convention (amber dashed line), not by API sync — removing Bryan from the group doesn't revoke AWS by itself. Path A closes that gap structurally. Roadmap: enable Identity Center (B), federate Okta (A), and sync group membership to assignments via API in the meantime.",
+     focus:["okta_group2","iam2","samlA","idcA","psA"],
+     edges:["a1","a2","a3","a4"],
+     packets:[{edge:"gap", color:C.amber},{edge:"gap", rev:true, color:C.amber}]}
+  ]
+};
+
+/* ================================================================
+   boot + tab switching + keyboard
+   ================================================================ */
+const scenes = { t1: buildScene(T1), t2: buildScene(T2) };
+let activeTab = "t1";
+
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.tab;
+    if (target === activeTab) return;
+    // reset + pause the tab being hidden
+    stopPlay(scenes[activeTab]);
+    setStep(scenes[activeTab], 0);
+    scenes[activeTab].token++;        // kill its packet loops while hidden
+    document.getElementById("panel-" + activeTab).classList.add("hidden");
+    document.querySelector(`.tab[data-tab="${activeTab}"]`).classList.remove("active");
+    activeTab = target;
+    document.getElementById("panel-" + activeTab).classList.remove("hidden");
+    btn.classList.add("active");
+    setStep(scenes[activeTab], 0);    // (re)start packets now that it's visible
+  });
+});
+
+// deep-linking: ?tab=t2&step=7 (or #t2) jumps straight to a view
+const qp = new URLSearchParams(location.search);
+if (qp.get("tab") === "t2" || location.hash === "#t2")
+  document.querySelector('.tab[data-tab="t2"]').click();
+const qstep = parseInt(qp.get("step"), 10);
+if (!isNaN(qstep)) setStep(scenes[activeTab], qstep - 1);
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+  const s = scenes[activeTab];
+  if (e.key === "ArrowRight"){ stopPlay(s); setStep(s, s.idx + 1); }
+  else if (e.key === "ArrowLeft"){ stopPlay(s); setStep(s, s.idx - 1); }
+  else if (e.key === " "){ e.preventDefault(); s.playing ? stopPlay(s) : startPlay(s); }
+});
+</script>
+</body>
+</html>
