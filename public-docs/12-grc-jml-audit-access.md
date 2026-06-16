@@ -117,7 +117,7 @@ terraform init && terraform apply
 
 ### 3. Claude Desktop — AWS MCP
 
-See [`docs/claude-desktop-grc-aws-mcp.md`](../docs/claude-desktop-grc-aws-mcp.md).
+See [claude-desktop-grc-aws-mcp.md](claude-desktop-grc-aws-mcp.md).
 
 Append to `~/.aws/config`:
 
@@ -145,12 +145,30 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-**Example prompts:**
+**Example prompts** (use exact table names and `us-west-1` — see troubleshooting below):
 
-- *Query ohmgym-onboarding-logs for run_date 2026-06-12 in us-west-1.*
-- *Scan the first 10 rows from ohmgym-offboarding-logs.*
+- *Using aws-grc-audit MCP, scan `ohmgym-offboarding-logs` in `us-west-1`. Return first 10 items.*
+- *Query `ohmgym-onboarding-logs` in `us-west-1` where `run_date` = "2026-06-15".*
 
 **CLI alternative:** [`scripts/grc/query_jml_audit.py`](../scripts/grc/query_jml_audit.py)
+
+### Troubleshooting AccessDenied from Claude MCP
+
+If Claude reports AccessDenied and suggests adding policy for `off-boarding-logs` in **us-east-1**, the IAM role is usually **already correct**. Common causes:
+
+| Mistake | Correct value |
+|---------|---------------|
+| Region `us-east-1` | **`us-west-1`** (JML stacks and audit tables) |
+| Table `off-boarding-logs` | **`ohmgym-offboarding-logs`** |
+| Table `onboarding-logs` | **`ohmgym-onboarding-logs`** |
+
+Verify access with CLI (same profile as MCP):
+
+```bash
+AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table offboarding --scan --max-items 2
+```
+
+If CLI succeeds, re-prompt Claude with exact table name and region. Full guide: [claude-desktop-grc-aws-mcp.md](claude-desktop-grc-aws-mcp.md).
 
 ```bash
 AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table offboarding --scan --max-items 5
@@ -187,7 +205,7 @@ Integration tests: `tests/integration/test_jml_aws_live.py` includes `test_grc_a
 | [`config/aws/desired-state.json`](../config/aws/desired-state.json) | AWS GRC access metadata |
 | [`terraform/aws-grc-audit/`](../terraform/aws-grc-audit/) | IAM role + optional SSO |
 | [`scripts/grc/`](../scripts/grc/) | Group assignment, test user provision, query CLI |
-| [`docs/claude-desktop-grc-aws-mcp.md`](../docs/claude-desktop-grc-aws-mcp.md) | Claude Desktop operator guide |
+| [claude-desktop-grc-aws-mcp.md](claude-desktop-grc-aws-mcp.md) | Claude Desktop operator guide |
 
 ## Future work
 
