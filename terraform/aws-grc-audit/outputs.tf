@@ -23,16 +23,6 @@ output "offboarding_table_arn" {
   value       = data.aws_dynamodb_table.offboarding_logs.arn
 }
 
-output "identity_center_enabled" {
-  description = "Whether SSO permission set resources were created."
-  value       = local.identity_center_enabled
-}
-
-output "sso_permission_set_arn" {
-  description = "JMLAuditReadOnly permission set ARN (null when Identity Center disabled)."
-  value       = local.identity_center_enabled ? aws_ssoadmin_permission_set.jml_audit_readonly[0].arn : null
-}
-
 output "aws_cli_profile_snippet" {
   description = "Append to ~/.aws/config for local / Claude Desktop assume-role access."
   value       = <<-EOT

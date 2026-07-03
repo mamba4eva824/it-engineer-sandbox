@@ -11,7 +11,6 @@ data "aws_dynamodb_table" "offboarding_logs" {
 }
 
 locals {
-  account_id              = data.aws_caller_identity.current.account_id
-  identity_center_enabled = var.identity_center_instance_arn != ""
-  trusted_principals      = length(var.trusted_principal_arns) > 0 ? var.trusted_principal_arns : [data.aws_caller_identity.current.arn]
+  account_id         = data.aws_caller_identity.current.account_id
+  trusted_principals = length(var.trusted_principal_arns) > 0 ? var.trusted_principal_arns : [data.aws_caller_identity.current.arn]
 }

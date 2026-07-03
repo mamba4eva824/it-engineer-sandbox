@@ -1,0 +1,15 @@
+aws_region = "us-west-1"
+
+identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-8201b8267b073f96"
+identity_store_id            = "d-916773644c"
+target_account_id            = "430118826061"
+
+# Okta access-developers group members (Engineering seed users, etc.)
+developer_user_emails = [
+  # "samantha.anderson@ohmgym.com",
+]
+
+# Okta access-jml-audit group members
+grc_user_emails = [
+  "weinreichchris@gmail.com",
+]
