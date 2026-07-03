@@ -1,19 +1,46 @@
 {
   "schemaVersion": 1,
-  "exportedAt": "2026-06-11T00:00:00+00:00",
+  "exportedAt": "2026-07-03T04:50:00+00:00",
   "awsAccountId": "430118826061",
   "primaryRegion": "us-west-1",
-  "identityCenter": {
-    "enabled": false,
-    "verifiedAt": "2026-06-11",
-    "notes": "aws sso-admin list-instances returned [] in us-west-1 and us-east-1. Account is not in an AWS Organization. Path B (IAM Identity Center SSO) is deferred until Identity Center is enabled. Implemented Path C hybrid: standalone IAM role ohmgym-grc-jml-audit-read with optional SSO permission set in terraform/aws-grc-audit/sso.tf when identity_center_instance_arn is set.",
-    "portalUrl": null,
-    "issuerUrl": null,
-    "identityStoreId": null,
-    "identitySource": null
+  "organization": {
+    "id": "o-37piwzwyzn",
+    "featureSet": "ALL",
+    "managementAccountId": "430118826061",
+    "managementAccountEmail": "117labs@gmail.com",
+    "verifiedAt": "2026-07-02"
   },
+  "identityCenter": {
+    "enabled": true,
+    "verifiedAt": "2026-07-02",
+    "homeRegion": "us-west-1",
+    "instanceArn": "arn:aws:sso:::instance/ssoins-8201b8267b073f96",
+    "identityStoreId": "d-916773644c",
+    "portalUrl": "https://d-916773644c.awsapps.com/start",
+    "issuerUrl": null,
+    "identitySource": "IDENTITY_CENTER_DIRECTORY",
+    "status": "ACTIVE",
+    "notes": "Phase 0 complete (2026-07-02). Organization o-37piwzwyzn with management account 430118826061. IAM Identity Center enabled in us-west-1. Permission sets managed in terraform/aws-identity-center/. Path C hybrid IAM role ohmgym-grc-jml-audit-read remains for CLI assume-role until Okta SAML (Phase 1)."
+  },
+  "permissionSets": [
+    {
+      "name": "Developer",
+      "managedPolicy": "PowerUserAccess",
+      "identityStoreGroup": "Developers",
+      "oktaGroup": "access-developers",
+      "description": "PowerUser access for developer personas."
+    },
+    {
+      "name": "JMLAuditReadOnly",
+      "inlinePolicy": "dynamodb-read-jml-audit-tables",
+      "identityStoreGroup": "GRC",
+      "oktaGroup": "access-jml-audit",
+      "iamRoleEquivalent": "ohmgym-grc-jml-audit-read",
+      "description": "Read-only DynamoDB access to ohmgym-onboarding-logs and ohmgym-offboarding-logs."
+    }
+  ],
   "grcJmlAudit": {
-    "accessPath": "C-hybrid",
+    "accessPath": "identity-center",
     "oktaGroup": "access-jml-audit",
     "iamRoleName": "ohmgym-grc-jml-audit-read",
     "iamRoleArn": "arn:aws:iam::430118826061:role/ohmgym-grc-jml-audit-read",
@@ -30,7 +57,7 @@
         "role": "GRC Analyst",
         "notes": "Login/email is personal Gmail (Claude Desktop Google OAuth); first/last name are independent of login in Okta.",
         "okta": true,
-        "identityCenter": false
+        "identityCenter": true
       }
     ]
   }

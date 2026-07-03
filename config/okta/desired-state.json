@@ -125,8 +125,13 @@
       "type": "OKTA_GROUP"
     },
     {
+      "name": "access-developers",
+      "description": "Members receive AWS Developer permission set (PowerUser) via IAM Identity Center. Manual membership (not rule-driven).",
+      "type": "OKTA_GROUP"
+    },
+    {
       "name": "access-jml-audit",
-      "description": "GRC/Security read-only access to JML onboarding/offboarding DynamoDB audit tables via AWS IAM. Manual membership (not rule-driven).",
+      "description": "GRC/Security read-only access to JML audit tables via IAM Identity Center JMLAuditReadOnly permission set (or standalone IAM role until SAML). Manual membership (not rule-driven).",
       "type": "OKTA_GROUP"
     }
   ],

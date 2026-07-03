@@ -28,33 +28,6 @@ variable "trusted_principal_arns" {
   default     = []
 }
 
-variable "identity_center_instance_arn" {
-  description = "IAM Identity Center instance ARN. Leave empty when Identity Center is not enabled."
-  type        = string
-  default     = ""
-}
-
-variable "identity_store_id" {
-  description = "Identity Store ID (d-xxxxxxxxxx). Required when identity_center_instance_arn is set."
-  type        = string
-  default     = ""
-}
-
-variable "sso_target_account_id" {
-  description = "AWS account ID for SSO account assignments."
-  type        = string
-  default     = ""
-}
-
-variable "sso_user_emails" {
-  description = "Emails of GRC users to provision in Identity Store and assign JMLAuditReadOnly."
-  type        = list(string)
-  default = [
-    "bryan.wong@ohmgym.com",
-    "weinreichchris@gmail.com",
-  ]
-}
-
 variable "tags" {
   description = "Default tags applied by the AWS provider."
   type        = map(string)

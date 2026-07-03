@@ -1,0 +1,24 @@
+output "developer_permission_set_arn" {
+  description = "Developer permission set ARN (PowerUserAccess)."
+  value       = aws_ssoadmin_permission_set.developer.arn
+}
+
+output "jml_audit_readonly_permission_set_arn" {
+  description = "JMLAuditReadOnly permission set ARN (GRC DynamoDB read)."
+  value       = aws_ssoadmin_permission_set.jml_audit_readonly.arn
+}
+
+output "developers_group_id" {
+  description = "Identity Store Developers group ID."
+  value       = aws_identitystore_group.developers.group_id
+}
+
+output "grc_group_id" {
+  description = "Identity Store GRC group ID."
+  value       = aws_identitystore_group.grc.group_id
+}
+
+output "provisioned_user_ids" {
+  description = "Identity Store user IDs keyed by email."
+  value       = { for email, user in aws_identitystore_user.member : email => user.user_id }
+}
