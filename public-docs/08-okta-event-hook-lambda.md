@@ -355,6 +355,8 @@ Phase 7 of the roadmap explicitly calls for S3 + DynamoDB remote state. For a si
 
 ## Caveats and explicit non-goals
 
+- **403 on Okta Verify (new AWS accounts).** Lambda Function URLs with `AuthType: NONE` can still return 403 until the function resource policy grants both `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` to principal `*`. Newer accounts default to Lambda public-access blocks. `terraform/aws/lambda.tf` declares both permissions.
+
 - **No retry queue.** If Slack is unreachable when the Okta event arrives, the Lambda returns 200 (so Okta doesn't redeliver) and the post is dropped — CloudWatch shows the failure. Production would queue the post to SQS and retry. Acceptable tradeoff for this scope.
 - **No HMAC signature verification.** Static shared-secret only (see "Decisions" above).
 - **No alarms.** Logs only (see "Decisions" above).

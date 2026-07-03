@@ -1,26 +1,32 @@
 {
   "schemaVersion": 1,
-  "exportedAt": "2026-07-03T04:50:00+00:00",
-  "awsAccountId": "430118826061",
+  "exportedAt": "2026-07-03T17:45:00+00:00",
+  "awsAccountId": "882248517627",
   "primaryRegion": "us-west-1",
   "organization": {
-    "id": "o-37piwzwyzn",
+    "id": "o-4gxzql0lf2",
     "featureSet": "ALL",
-    "managementAccountId": "430118826061",
-    "managementAccountEmail": "117labs@gmail.com",
-    "verifiedAt": "2026-07-02"
+    "managementAccountId": "882248517627",
+    "managementAccountEmail": "buffett.dev117@gmail.com",
+    "verifiedAt": "2026-07-03"
+  },
+  "legacyAccount": {
+    "awsAccountId": "430118826061",
+    "organizationId": "o-37piwzwyzn",
+    "migrationCompletedAt": "2026-07-03",
+    "notes": "Prior IT Ops sandbox management account. JML stacks destroyed after validation soak per public-docs/15-aws-account-migration-plan.md. Org/account closure is a separate operator decision."
   },
   "identityCenter": {
     "enabled": true,
-    "verifiedAt": "2026-07-02",
+    "verifiedAt": "2026-07-03",
     "homeRegion": "us-west-1",
-    "instanceArn": "arn:aws:sso:::instance/ssoins-8201b8267b073f96",
-    "identityStoreId": "d-916773644c",
-    "portalUrl": "https://d-916773644c.awsapps.com/start",
+    "instanceArn": "arn:aws:sso:::instance/ssoins-8201e2932463b8a0",
+    "identityStoreId": "d-91670e0759",
+    "portalUrl": "https://d-91670e0759.awsapps.com/start",
     "issuerUrl": null,
     "identitySource": "IDENTITY_CENTER_DIRECTORY",
     "status": "ACTIVE",
-    "notes": "Phase 0 complete (2026-07-02). Organization o-37piwzwyzn with management account 430118826061. IAM Identity Center enabled in us-west-1. Permission sets managed in terraform/aws-identity-center/. Path C hybrid IAM role ohmgym-grc-jml-audit-read remains for CLI assume-role until Okta SAML (Phase 1)."
+    "notes": "OhmGym lab account (882248517627). IAM Identity Center enabled in us-west-1. Permission sets managed in terraform/aws-identity-center/. Path C hybrid IAM role ohmgym-grc-jml-audit-read remains for CLI assume-role until Okta SAML (Phase 1)."
   },
   "permissionSets": [
     {
@@ -43,8 +49,8 @@
     "accessPath": "identity-center",
     "oktaGroup": "access-jml-audit",
     "iamRoleName": "ohmgym-grc-jml-audit-read",
-    "iamRoleArn": "arn:aws:iam::430118826061:role/ohmgym-grc-jml-audit-read",
-    "assumePolicyArn": "arn:aws:iam::430118826061:policy/ohmgym-grc-jml-audit-assume",
+    "iamRoleArn": "arn:aws:iam::882248517627:role/ohmgym-grc-jml-audit-read",
+    "assumePolicyArn": "arn:aws:iam::882248517627:policy/ohmgym-grc-jml-audit-assume",
     "permissionSetName": "JMLAuditReadOnly",
     "dynamodbTables": [
       "ohmgym-onboarding-logs",

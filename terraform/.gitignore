@@ -1,0 +1,3 @@
+# Local state backups from account migration — never commit
+.state-backup-*/
+*.tfplan

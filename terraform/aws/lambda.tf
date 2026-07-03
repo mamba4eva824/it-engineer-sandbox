@@ -64,3 +64,21 @@ resource "aws_lambda_function_url" "okta_activation_handler" {
   function_name      = aws_lambda_function.okta_activation_handler.function_name
   authorization_type = "NONE" # Okta authenticates via shared secret in the body's Authorization header
 }
+
+# Public Function URL access requires BOTH permissions on accounts with Lambda
+# public-access controls (default on newer AWS accounts). InvokeFunctionUrl alone
+# returns 403 even when AuthType is NONE — blocks Okta GET verification.
+resource "aws_lambda_permission" "function_url_public" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.okta_activation_handler.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "function_url_invoke" {
+  statement_id  = "FunctionURLAllowPublicInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.okta_activation_handler.function_name
+  principal     = "*"
+}

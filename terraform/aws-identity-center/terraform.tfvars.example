@@ -1,8 +1,9 @@
 aws_region = "us-west-1"
 
-identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-8201b8267b073f96"
-identity_store_id            = "d-916773644c"
-target_account_id            = "430118826061"
+# Optional — leave empty to auto-detect via data.aws_ssoadmin_instances in us-west-1:
+# identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-8201b8267b073f96"
+# identity_store_id            = "d-916773644c"
+target_account_id = "882248517627"
 
 # Okta access-developers group members (Engineering seed users, etc.)
 developer_user_emails = [
