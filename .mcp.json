@@ -36,6 +36,10 @@
         "AWS_REGION": "us-east-1",
         "AWS_API_MCP_PROFILE_NAME": "default"
       }
+    },
+    "linear": {
+      "url": "https://mcp.linear.app/mcp",
+      "transport": "http"
     }
   }
 }
