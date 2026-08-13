@@ -1,0 +1,26 @@
+{
+  "github": {
+    "label": "GitHub",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/github-read",
+    "write_secret": "ohmgym-licenses/github-write",
+    "actions": ["remove_org_member"]
+  },
+  "figma": {
+    "label": "Figma",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/figma-read",
+    "write_secret": "ohmgym-licenses/figma-write",
+    "actions": ["remove_team_member"]
+  },
+  "jira": {
+    "label": "Jira / Atlassian",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/jira-read",
+    "write_secret": "ohmgym-licenses/jira-write",
+    "actions": ["remove_product_access", "deactivate_user"]
+  }
+}

@@ -5,19 +5,31 @@ variable "aws_region" {
 }
 
 variable "identity_center_instance_arn" {
-  description = "IAM Identity Center instance ARN (ssoins-...)."
+  description = "IAM Identity Center instance ARN (ssoins-...). Leave empty to auto-detect from the provider region."
   type        = string
+  default     = ""
+
+  validation {
+    condition     = var.identity_center_instance_arn == "" || can(regex("^arn:aws:sso:::instance/", var.identity_center_instance_arn))
+    error_message = "Must be an IAM Identity Center instance ARN or empty to auto-detect."
+  }
 }
 
 variable "identity_store_id" {
-  description = "Identity Store ID (d-...)."
+  description = "Identity Store ID (d-...). Leave empty to auto-detect from the provider region."
   type        = string
+  default     = ""
+
+  validation {
+    condition     = var.identity_store_id == "" || can(regex("^d-[a-z0-9]+$", var.identity_store_id))
+    error_message = "Must be an Identity Store ID (d-xxxxxxxxxx) or empty to auto-detect."
+  }
 }
 
 variable "target_account_id" {
   description = "AWS account ID receiving permission set assignments."
   type        = string
-  default     = "430118826061"
+  default     = "882248517627"
 }
 
 variable "onboarding_table_name" {

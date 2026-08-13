@@ -1,8 +1,8 @@
-"""Integration tests against live AWS (sandbox account).
+"""Integration tests against live AWS (OhmGym account 882248517627).
 
 Run locally after migration:
-  JML_INTEGRATION=1 pytest tests/integration -v
-  # or: pytest tests/integration -v --run-integration
+  AWS_PROFILE=ohm-gym JML_INTEGRATION=1 pytest tests/integration -v
+  # or: AWS_PROFILE=ohm-gym pytest tests/integration -v --run-integration
 
 Skipped in CI unless credentials and --run-integration are provided.
 """

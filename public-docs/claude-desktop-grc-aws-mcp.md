@@ -8,15 +8,15 @@ Companion: [12-grc-jml-audit-access.md](12-grc-jml-audit-access.md)
 
 - `terraform apply` completed in `terraform/aws-grc-audit/`
 - Okta user in `access-jml-audit` (governance record; AWS access is via IAM assume role)
-- AWS CLI `default` profile can call `sts:AssumeRole` on `ohmgym-grc-jml-audit-read`
+- AWS CLI `ohm-gym` profile (or `source_profile`) can call `sts:AssumeRole` on `ohmgym-grc-jml-audit-read`
 
 ## 1. AWS profile (`~/.aws/config`)
 
 ```ini
 [profile ohmgym-grc-jml-audit]
 region = us-west-1
-role_arn = arn:aws:iam::430118826061:role/ohmgym-grc-jml-audit-read
-source_profile = default
+role_arn = arn:aws:iam::882248517627:role/ohmgym-grc-jml-audit-read
+source_profile = ohm-gym
 ```
 
 **Important:** JML audit tables live in **us-west-1**, not `us-east-1`. Your `[default]` profile may be `us-east-1`; the GRC profile overrides region to `us-west-1` when MCP uses `AWS_API_MCP_PROFILE_NAME`.
@@ -84,8 +84,8 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py \
 
 **Cause:** The IAM role is correct. Claude (or the MCP call) used the **wrong region** and/or **wrong table name**. The GRC policy only allows:
 
-- `arn:aws:dynamodb:us-west-1:430118826061:table/ohmgym-onboarding-logs`
-- `arn:aws:dynamodb:us-west-1:430118826061:table/ohmgym-offboarding-logs`
+- `arn:aws:dynamodb:us-west-1:882248517627:table/ohmgym-onboarding-logs`
+- `arn:aws:dynamodb:us-west-1:882248517627:table/ohmgym-offboarding-logs`
 
 Access denied in `us-east-1` is **expected** — it does not mean the policy is missing.
 
@@ -108,7 +108,7 @@ aws iam get-role-policy \
 
 ### AssumeRole fails
 
-Ensure `default` (or `source_profile`) has permission to assume `ohmgym-grc-jml-audit-read`, or add your IAM user ARN to `trusted_principal_arns` in `terraform/aws-grc-audit/terraform.tfvars` and re-apply.
+Ensure `ohm-gym` (or `source_profile`) has permission to assume `ohmgym-grc-jml-audit-read`, or add your IAM user ARN to `trusted_principal_arns` in `terraform/aws-grc-audit/terraform.tfvars` and re-apply.
 
 ### PutItem denied (expected)
 

@@ -21,17 +21,17 @@ Companion to:
 
 Audit tables store one row per `(run_date, user_id)` with status, department, role title, Okta response code, and batch metadata. GRC uses them to review whether scheduled JML runs succeeded without access to Okta API secrets, Lambda execution roles, or write paths.
 
-## Access path implemented: C-hybrid
+## Access path implemented: Identity Center + C-hybrid
 
-IAM Identity Center is **not enabled** in sandbox account `430118826061` (`aws sso-admin list-instances` returned `[]`; account is not in an AWS Organization). **Path B** (Identity Center SSO) and **Path A** (Okta SAML federation) are prepared in Terraform but not activated.
+IAM Identity Center is **enabled** in OhmGym account `882248517627` (`ssoins-8201e2932463b8a0`, portal https://d-91670e0759.awsapps.com/start). **Path B** (Identity Center SSO) is managed in `terraform/aws-identity-center/`. **Path A** (Okta SAML federation) remains deferred.
 
-**Implemented:** Path C hybrid — standalone IAM role `ohmgym-grc-jml-audit-read` with read-only DynamoDB policy. Okta remains the **identity and governance** source (`access-jml-audit` group); AWS access is provisioned via Terraform and linked by email convention until Identity Center is enabled.
+**Also live:** Path C hybrid — standalone IAM role `ohmgym-grc-jml-audit-read` with read-only DynamoDB policy for Claude Desktop / CLI assume-role until Okta SAML (Phase 1).
 
 | Path | Status |
 |------|--------|
 | A — Okta SAML → IAM Identity Center | Deferred (see [02-aws-saml-federation.md](02-aws-saml-federation.md)) |
-| B — Identity Center SSO only | Terraform ready in `sso.tf`; blocked on enabling Identity Center |
-| **C-hybrid — IAM assume role + Okta group** | **Live** |
+| **B — Identity Center SSO** | **Live** in `882248517627` via `terraform/aws-identity-center/` |
+| **C-hybrid — IAM assume role + Okta group** | **Live** (Claude Desktop / CLI) |
 
 ## End-to-end topology
 
@@ -44,7 +44,7 @@ Okta (integrator-2367542.okta.com)
   └── config-as-code: desired-state.json + reconcile_config.py
         (Terraform does NOT create Okta resources)
 
-AWS (430118826061, us-west-1)
+AWS (882248517627, us-west-1)
   │
   ├── IAM role: ohmgym-grc-jml-audit-read
   │     └── inline policy: dynamodb Query/Scan/GetItem/DescribeTable
@@ -124,8 +124,8 @@ Append to `~/.aws/config`:
 ```ini
 [profile ohmgym-grc-jml-audit]
 region = us-west-1
-role_arn = arn:aws:iam::430118826061:role/ohmgym-grc-jml-audit-read
-source_profile = default
+role_arn = arn:aws:iam::882248517627:role/ohmgym-grc-jml-audit-read
+source_profile = ohm-gym
 ```
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -191,7 +191,7 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table o
 | `sts assume-role` → `ohmgym-grc-jml-audit-read` | Success |
 | `dynamodb scan` on `ohmgym-offboarding-logs` as GRC role | Success (sample rows returned) |
 | `dynamodb put-item` as GRC role | `AccessDeniedException` |
-| IAM Identity Center instances | None (documented in `config/aws/desired-state.json`) |
+| IAM Identity Center instances | Active in `882248517627` (documented in `config/aws/desired-state.json`) |
 | Okta group + users | Config committed; apply with `.env` credentials |
 
 Integration tests: `tests/integration/test_jml_aws_live.py` includes `test_grc_audit_role_deployed` and policy scope checks.
