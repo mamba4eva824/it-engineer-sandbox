@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Jira/JSM field IDs for license reclamation automation. Phase 1 output; Phase 2 scanner and Phase 3 broker consume these IDs.",
+  "site": {
+    "url": "https://buffett-dev.atlassian.net",
+    "cloudId": "359c6979-fbf2-459e-b948-9feb032a082e",
+    "name": "buffett-dev"
+  },
+  "project": {
+    "key": "SUP",
+    "id": "10099",
+    "name": "Support",
+    "projectTypeKey": "service_desk",
+    "serviceDeskId": "1",
+    "portalId": "1",
+    "portalUrl": "https://buffett-dev.atlassian.net/servicedesk/customer/portal/1",
+    "agentUrl": "https://buffett-dev.atlassian.net/jira/servicedesk/projects/SUP/queues"
+  },
+  "credentials": {
+    "env": [
+      "JIRA_BASE_URL",
+      "JIRA_EMAIL",
+      "JIRA_API_TOKEN",
+      "JIRA_CLOUD_ID"
+    ],
+    "notes": "Cursor Atlassian MCP OAuth covers Phase 1 reads/comments. JIRA_* API token is required for the Phase 2 scanner to create issues. Do not commit tokens. Suggested values: JIRA_BASE_URL=https://buffett-dev.atlassian.net JIRA_CLOUD_ID=359c6979-fbf2-459e-b948-9feb032a082e JIRA_EMAIL=<Atlassian account email> JIRA_API_TOKEN=<https://id.atlassian.com/manage-profile/security/api-tokens>"
+  },
+  "systemFields": {
+    "summary": "summary",
+    "description": "description",
+    "assignee": "assignee",
+    "labels": "labels",
+    "priority": "priority",
+    "requestType": "customfield_10010",
+    "organizations": "customfield_10002",
+    "approvers": "customfield_10003",
+    "requestParticipants": "customfield_10129"
+  },
+  "issueTypes": {
+    "submit_a_request_or_incident": {
+      "id": "10079",
+      "name": "Submit a request or incident"
+    },
+    "ask_a_question": {
+      "id": "10080",
+      "name": "Ask a question"
+    },
+    "emailed_request": {
+      "id": "10081",
+      "name": "Emailed request"
+    },
+    "task": {
+      "id": "10082",
+      "name": "Task"
+    }
+  },
+  "requestTypes": {
+    "submit_a_request_or_incident": {
+      "id": "1",
+      "name": "Submit a request or incident",
+      "issueTypeId": "10079"
+    },
+    "ask_a_question": {
+      "id": "2",
+      "name": "Ask a question",
+      "issueTypeId": "10080"
+    },
+    "emailed_request": {
+      "id": "3",
+      "name": "Emailed request",
+      "issueTypeId": "10081"
+    },
+    "license_reclamation": {
+      "id": "4",
+      "name": "License Reclamation",
+      "issueTypeId": "10079",
+      "issueTypeName": "Submit a request or incident",
+      "status": "ready",
+      "adminUrl": "https://buffett-dev.atlassian.net/jira/servicedesk/projects/SUP/settings/request-types"
+    }
+  },
+  "reclaimFields": {
+    "leaver_email": {
+      "jira_id": "customfield_10138",
+      "name": "Leaver email",
+      "type": "textfield",
+      "required": true,
+      "status": "ready"
+    },
+    "okta_user_id": {
+      "jira_id": "customfield_10139",
+      "name": "Okta user ID",
+      "type": "textfield",
+      "required": true,
+      "status": "ready"
+    },
+    "offboarding_run_id": {
+      "jira_id": "customfield_10140",
+      "name": "Offboarding run ID",
+      "type": "textfield",
+      "required": false,
+      "status": "ready"
+    },
+    "apps_requiring_action": {
+      "jira_id": "customfield_10141",
+      "name": "Apps requiring action",
+      "type": "textfield",
+      "required": true,
+      "allowed_app_keys": ["github", "figma", "jira"],
+      "notes": "Created as Short text in JSM Admin (not Paragraph). Scanner should write a comma-separated list of app keys.",
+      "status": "ready"
+    },
+    "hold_exception_notes": {
+      "jira_id": "customfield_10142",
+      "name": "Hold / exception notes",
+      "type": "textfield",
+      "required": false,
+      "notes": "Created as Short text in JSM Admin (not Paragraph).",
+      "status": "ready"
+    }
+  },
+  "queue": {
+    "name": "License Reclamation",
+    "jql": "project = SUP AND \"Request Type\" = \"License Reclamation\" AND resolution = Unresolved",
+    "status": "ready",
+    "adminUrl": "https://buffett-dev.atlassian.net/jira/servicedesk/projects/SUP/queues"
+  },
+  "sampleTicket": {
+    "key": "SUP-2",
+    "id": "10155",
+    "url": "https://buffett-dev.atlassian.net/browse/SUP-2",
+    "queueUrl": "https://buffett-dev.atlassian.net/jira/servicedesk/projects/SUP/queues",
+    "leaver_email": "marcus.reyes@ohmgym.com",
+    "okta_user_id": "00uSAMPLEMARCUS00000",
+    "offboarding_run_id": "PHASE1-SAMPLE",
+    "apps_requiring_action": "github, figma",
+    "status": "ready"
+  }
+}
