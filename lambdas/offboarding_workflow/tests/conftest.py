@@ -106,19 +106,23 @@ def make_okta_user(
     department: str = "Engineering",
     role_title: str = "Engineer",
     end_date: str = "2026-05-14",
+    github_username: str | None = None,
 ) -> dict:
+    profile = {
+        "login": login,
+        "email": login,
+        "firstName": first_name,
+        "lastName": last_name,
+        "department": department,
+        "role_title": role_title,
+        "endDate": end_date,
+    }
+    if github_username is not None:
+        profile["githubUsername"] = github_username
     return {
         "id": user_id,
         "status": "ACTIVE",
-        "profile": {
-            "login": login,
-            "email": login,
-            "firstName": first_name,
-            "lastName": last_name,
-            "department": department,
-            "role_title": role_title,
-            "endDate": end_date,
-        },
+        "profile": profile,
     }
 
 

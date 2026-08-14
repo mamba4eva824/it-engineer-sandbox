@@ -4,10 +4,11 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (14 Aug 2026):** Phase 0 and Phase 1 are complete. Next build is Phase 2 (scanner Lambda). Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are complete in code. Live apply + secret promote remain operator steps. Next build is Phase 3 (reclaim broker). Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
+- [License Reclaimer/phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md)
 
 Companion to:
 
@@ -455,7 +456,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 
 ### Phase 2 — Deterministic License Scanner Lambda
 
-**Status:** Next. Error-handling contract is specified above; implement it in the handler, not as an afterthought.
+**Status:** Code complete (14 Aug 2026). Log: [phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md). Live apply / secret promote / `githubUsername` reconcile are operator-gated. P2-R10 dashboard deferred.
 
 **Objective:** After offboarding success, scan GitHub / Linear / Jira (read-only). Ticket + Slack + DynamoDB when seats remain **or** a scan is incomplete.
 
@@ -470,7 +471,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 | P2-R7  | Idempotent: `GetItem` then JQL guard; same `(run_date, user_id)` comments the existing ticket, does not open a duplicate |
 | P2-R8  | `--dry-run` / `dry_run` event flag prints plan without Jira create                                                      |
 | P2-R9  | Unit tests with mocked HTTP for all three connectors **and** the failure cases in exit criteria                         |
-| P2-R10 | Extend dashboard or workflows UI to show reclaim findings (optional same phase)                                         |
+| P2-R10 | Extend dashboard or workflows UI to show reclaim findings — **deferred**                                                |
 | P2-R11 | Persist `error_class`, `http_status`, `retryable` on each `apps[]` error; structured CloudWatch JSON                    |
 | P2-R12 | Isolate connectors: one app’s exception does not skip the others (ADR-010)                                              |
 | P2-R13 | Ticket on unknown: never map connector `error` to row `status=clean`                                                    |
@@ -480,23 +481,23 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 
 **Exit criteria:**
 
-- [ ] Deactivate test leaver → scanner runs → ticket lists exact apps with active seats
-- [ ] Clean user (no seats, no errors) → `status=clean`, no ticket
-- [ ] GitHub **404** → `not_member`; GitHub **401** → `misconfig` (not `not_member`)
-- [ ] Jira called at site URL → `misconfig` 401; gateway empty search → `not_member`
-- [ ] Linear timeout + GitHub `active` → one ticket, row `status=partial`, Linear `error_class=retryable`
-- [ ] Duplicate invoke with existing `jira_issue_key` → no second ticket
-- [ ] JSM create **500** after findings persist → DDB `status=error`, Slack error line, Lambda raises (alarm / SNS)
-- [ ] Forced secret-load failure → Lambda Errors + SNS; offboarding Lambda unaffected
+- [ ] Deactivate test leaver → scanner runs → ticket lists exact apps with active seats *(live apply pending)*
+- [x] Clean user (no seats, no errors) → `status=clean`, no ticket *(unit)*
+- [x] GitHub **404** → `not_member`; GitHub **401** → `misconfig` (not `not_member`)
+- [x] Jira called at site URL → `misconfig` 401; gateway empty search → `not_member`
+- [x] Linear timeout + GitHub `active` → one ticket, row `status=partial`, Linear `error_class=retryable`
+- [x] Duplicate invoke with existing `jira_issue_key` → no second ticket
+- [x] JSM create **500** after findings persist → DDB `status=error`, Slack error line, Lambda raises (alarm / SNS)
+- [x] Forced secret-load failure → Lambda Errors + SNS; offboarding Lambda unaffected *(unit: missing secret raises; scanner has no Okta secrets)*
 
 **Deliverables:**
 
 ```
 lambdas/license_scanner/handler.py
+lambdas/license_scanner/tests/
 scripts/licenses/
 config/licenses/apps.json
 terraform/aws-license-reclaim/
-tests/unit/test_license_scanner.py
 ```
 
 ---
@@ -707,7 +708,7 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | 3   | Auto-reclaim GitHub in Phase 5?                     | Yes candidate (`auto_reclaim: true`); keep Linear/Jira human-gated   |
 | 4   | Shared JSM project with access-review or separate?  | **Resolved:** same site `buffett-dev`; project `SUP`; separate request type |
 | 5   | Register NHIs in Okta for AI Agents?                | Stretch after API Services app works                                 |
-| 6   | GitHub username for Okta email?                     | Still open: env map vs Okta profile attribute vs ticket field. Until decided, missing map = `identity_unresolved`. |
+| 6   | GitHub username for Okta email?                     | **Resolved:** Okta profile `githubUsername`. Offboarding copies it onto `leaver.completed`. Missing → `identity_unresolved` (ticket, no GitHub API). |
 
 ---
 
@@ -722,3 +723,4 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | [15](15-aws-account-migration-plan.md)         | Target AWS account for new stack                                   |
 | [Phase 0 log](License%20Reclaimer/phase-0-trials-and-credentials.md) | Proven membership APIs + HTTP classification evidence |
 | [Phase 1 log](License%20Reclaimer/phase-1-jsm-foundation.md) | JSM field IDs, request type `4`, project `SUP` |
+| [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda, error contract, operator apply/secret steps |

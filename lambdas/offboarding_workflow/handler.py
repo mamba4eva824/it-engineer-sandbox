@@ -13,7 +13,9 @@ invocation:
        c. POST /api/v1/users/{id}/lifecycle/deactivate to Okta.
        d. DynamoDB PutItem with the full identity snapshot + outcome.
   4. Post one batch-summary Block Kit message to #leaver-it-ops.
-  5. Emit structured JSON to CloudWatch Logs for each user + the final summary.
+  5. On each successful deactivate, PutEvents leaver.completed for the
+     license scanner (failure is logged and does not undo Okta deactivate).
+  6. Emit structured JSON to CloudWatch Logs for each user + the final summary.
 
 This is the PROACTIVE leaver half of the JML pipeline. SCIM cascades Slack
 (and GWS for real SCIM users) without code in this Lambda.
@@ -55,6 +57,10 @@ _PT = ZoneInfo("America/Los_Angeles")
 _secrets_client = boto3.client("secretsmanager", region_name=SECRETS_REGION)
 _dynamodb = boto3.resource("dynamodb", region_name=SECRETS_REGION)
 _table = _dynamodb.Table(DYNAMODB_TABLE_NAME)
+_events = boto3.client("events", region_name=SECRETS_REGION)
+
+LEAVER_COMPLETED_SOURCE = "ohmgym.offboarding"
+LEAVER_COMPLETED_DETAIL_TYPE = "leaver.completed"
 
 
 def _fetch_secret(name: str) -> str:
@@ -219,6 +225,35 @@ def _record_attempt(
         "ttl_epoch": ttl_epoch,
     }
     _table.put_item(Item=item)
+
+
+def _emit_leaver_completed(
+    *,
+    user_email: str,
+    okta_id: str,
+    run_id: str,
+    run_date: str,
+    github_username: str | None,
+) -> None:
+    """Publish leaver.completed for the license scanner. Raises on failed entries."""
+    detail = {
+        "user_email": user_email,
+        "okta_id": okta_id,
+        "run_id": run_id,
+        "run_date": run_date,
+        "github_username": github_username or None,
+    }
+    resp = _events.put_events(
+        Entries=[{
+            "Source": LEAVER_COMPLETED_SOURCE,
+            "DetailType": LEAVER_COMPLETED_DETAIL_TYPE,
+            "Detail": json.dumps(detail),
+        }]
+    )
+    if resp.get("FailedEntryCount", 0):
+        entries = resp.get("Entries") or []
+        reason = entries[0].get("ErrorMessage", "put_events failed") if entries else "put_events failed"
+        raise RuntimeError(reason[:500])
 
 
 def _post_slack(channel_id: str, text: str, blocks: list) -> tuple[bool, str]:
@@ -423,6 +458,29 @@ def lambda_handler(event, context):  # noqa: ARG001
                 okta_response_status=http_status,
                 error_message="",
             )
+            github_username = (profile.get("githubUsername") or "").strip() or None
+            try:
+                _emit_leaver_completed(
+                    user_email=login,
+                    okta_id=user_id,
+                    run_id=batch_run_id,
+                    run_date=run_date,
+                    github_username=github_username,
+                )
+            except Exception as e:
+                print(json.dumps({
+                    "event": "leaver_completed_emit_failed",
+                    "run_date": run_date,
+                    "batch_run_id": batch_run_id,
+                    "okta_id": user_id,
+                    "login": login,
+                    "error": str(e)[:500],
+                }))
+                errors.append({
+                    "login": login,
+                    "user_id": user_id,
+                    "error": f"leaver_completed_emit: {e}"[:500],
+                })
         else:
             errors.append({"login": login, "user_id": user_id, "error": err_msg, "http_status": http_status})
             _record_attempt(

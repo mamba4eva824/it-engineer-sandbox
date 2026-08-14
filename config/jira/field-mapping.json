@@ -106,7 +106,7 @@
       "name": "Apps requiring action",
       "type": "textfield",
       "required": true,
-      "allowed_app_keys": ["github", "figma", "jira"],
+      "allowed_app_keys": ["github", "linear", "jira"],
       "notes": "Created as Short text in JSM Admin (not Paragraph). Scanner should write a comma-separated list of app keys.",
       "status": "ready"
     },
