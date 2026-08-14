@@ -12,6 +12,7 @@ on:
       - 'scripts/licenses/**'
       - 'config/licenses/**'
       - 'config/jira/field-mapping.json'
+      - 'tests/unit/test_license_scanner_infra_contract.py'
       - '.github/workflows/license-scanner-ci.yml'
   pull_request:
     branches:
@@ -24,6 +25,7 @@ on:
       - 'scripts/licenses/**'
       - 'config/licenses/**'
       - 'config/jira/field-mapping.json'
+      - 'tests/unit/test_license_scanner_infra_contract.py'
       - '.github/workflows/license-scanner-ci.yml'
 
 concurrency:
@@ -49,6 +51,8 @@ jobs:
           pip install -r lambdas/offboarding_workflow/requirements-dev.txt
       - name: pytest license scanner
         run: pytest lambdas/license_scanner/tests -v
+      - name: pytest scanner infra error-handling contract
+        run: pytest tests/unit/test_license_scanner_infra_contract.py -v
       - name: pytest offboarding (leaver.completed emit)
         run: pytest lambdas/offboarding_workflow/tests -v
 

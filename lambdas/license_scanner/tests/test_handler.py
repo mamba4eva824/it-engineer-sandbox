@@ -96,6 +96,62 @@ def _issue_creates(rm: requests_mock.Mocker) -> list:
     return [r for r in rm.request_history if r.method == "POST" and ISSUE_POST.fullmatch(r.url.split("?")[0])]
 
 
+def test_github_401_tickets_and_does_not_raise(empty_table):
+    """Connector misconfig is ticketed; Lambda must not raise (no SNS)."""
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 401)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-401")
+        _mock_slack(rm)
+        result = handler.lambda_handler(_event(), None)
+    assert result["status"] == "partial"
+    github = next(a for a in result["apps"] if a["app"] == "github")
+    assert github["error_class"] == "misconfig"
+    assert github["status"] == "error"
+    assert result["jira_issue_key"] == "SUP-401"
+    linear = next(a for a in result["apps"] if a["app"] == "linear")
+    assert linear["status"] == "not_member"
+
+
+def test_github_401_does_not_skip_linear_or_jira(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 401)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-12")
+        _mock_slack(rm)
+        handler.lambda_handler(_event(), None)
+    assert any("api.linear.app" in (r.url or "") for r in rm.request_history)
+    assert any("user/search" in (r.url or "") for r in rm.request_history)
+
+
+def test_http_does_not_retry_401():
+    from http_util import request_with_retry
+
+    with requests_mock.Mocker() as rm:
+        rm.get("https://example.test/401", status_code=401, text="nope")
+        resp = request_with_retry("GET", "https://example.test/401", max_attempts=3)
+    assert resp.status_code == 401
+    assert len(rm.request_history) == 1
+
+
+def test_http_retries_500_then_returns():
+    from http_util import request_with_retry
+
+    with requests_mock.Mocker() as rm:
+        rm.get(
+            "https://example.test/500",
+            [
+                {"status_code": 500, "text": "blip"},
+                {"status_code": 200, "text": "ok"},
+            ],
+        )
+        resp = request_with_retry("GET", "https://example.test/500", max_attempts=3)
+    assert resp.status_code == 200
+    assert len(rm.request_history) == 2
+
+
 def test_clean_user_no_ticket(empty_table):
     with requests_mock.Mocker() as rm:
         _mock_github(rm, 404)

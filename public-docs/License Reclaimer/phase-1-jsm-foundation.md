@@ -12,7 +12,7 @@ Short log of License Reclamation intake on Jira Service Management. Roadmap: [16
 - Agent queue **License Reclamation** (`Request Type` = License Reclamation, unresolved).
 - Allowlist stub: `config/licenses/apps.json`.
 - MCP `getJiraIssue` returns the structured reclaim fields on SUP-2.
-- Scoped Jira API token in the gitignored project `.env` (P1-R4): `JIRA_BASE_URL`, `JIRA_CLOUD_ID`, `JIRA_EMAIL`, `JIRA_API_TOKEN`. Cursor MCP still does not need it; Phase 2 scanner Lambda does. Do not commit the token.
+- Scoped Jira API token in the gitignored project `.env` (P1-R4): `JIRA_BASE_URL`, `JIRA_CLOUD_ID`, `JIRA_EMAIL`, `JIRA_API_TOKEN`. Promoted to `ohmgym-licenses/jira-read` in Phase 2. Cursor MCP still does not need it. Do not commit the token.
 
 ## Configuration challenges
 

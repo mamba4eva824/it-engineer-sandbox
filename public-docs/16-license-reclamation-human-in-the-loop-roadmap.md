@@ -4,7 +4,7 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are complete in code. Live apply + secret promote remain operator steps. Next build is Phase 3 (reclaim broker). Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Next build is Phase 3 (reclaim broker). Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
@@ -408,7 +408,7 @@ Do not invent a second matrix. Broker (Phase 3) records partial success per app 
 
 ### Phase 0 — Trials & credentials
 
-**Status:** Complete (13 Aug 2026) for the v1 catalog (GitHub + Jira + Linear). Figma parked. P0-R5 demo-user seeding still open. Log: [phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md).
+**Status:** Complete (13 Aug 2026) for the v1 catalog (GitHub + Jira + Linear). Figma parked. P0-R5 mixed-seat demo users seeded 14 Aug 2026. Log: [phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md).
 
 **Objective:** Stand up GitHub, Linear, and Jira sandbox tenants with API access and SSO notes. No automation yet.
 
@@ -418,7 +418,7 @@ Do not invent a second matrix. Broker (Phase 3) records partial success per app 
 | P0-R2 | Third connector with a membership list API on a free/trial SKU                           | Met via **Linear** (`it-systems-sandbox`). Figma Starter parked (members 404). |
 | P0-R3 | Existing Jira/JSM site; API token for issue create + user lookup                         | Met. `buffett-dev`; scoped token; **gateway URL required**. |
 | P0-R4 | Document OIN / SSO notes per app (even if SAML gated on paid tier)                       | Met. All three: SSO/SCIM paid-tier. |
-| P0-R5 | Seed 2–3 test users mirrored to Okta leavers for demos                                   | **Open.** Same emails on all three apps in one pass. |
+| P0-R5 | Seed 2–3 test users mirrored to Okta leavers for demos                                   | **Partial.** Five Okta leavers with mixed GitHub/Linear/Jira seats (14 Aug 2026). Not identical membership on all three apps. Marcus Lee is a deliberate no-license user. |
 
 **Exit criteria:** Manual curl/Python can answer “is user X a member?” for all three v1 apps. **Met** after substituting Linear for Figma.
 
@@ -435,7 +435,7 @@ Do not invent a second matrix. Broker (Phase 3) records partial success per app 
 | P1-R1 | JSM project with **License Reclamation** request type                            | Met. Project `SUP`, request type id `4`. |
 | P1-R2 | Agent fields: leaver email, Okta ID, run ID, apps list, notes                    | Met. All Short text. |
 | P1-R3 | Queue for IT-Ops                                                                 | Met. Queue JQL filters request type + unresolved. |
-| P1-R4 | `JIRA_*` credentials in `.env` / Secrets Manager                                 | Met in gitignored `.env`. Promote to Secrets Manager in Phase 2. |
+| P1-R4 | `JIRA_*` credentials in `.env` / Secrets Manager                                 | Met. `.env` plus `ohmgym-licenses/jira-read` in Secrets Manager (Phase 2 apply). |
 | P1-R5 | `config/jira/field-mapping.json` includes reclaim fields                         | Met. |
 | P1-R6 | One manually created sample ticket; Atlassian MCP reads custom fields            | Met. [SUP-2](https://buffett-dev.atlassian.net/browse/SUP-2). |
 
@@ -456,7 +456,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 
 ### Phase 2 — Deterministic License Scanner Lambda
 
-**Status:** Code complete (14 Aug 2026). Log: [phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md). Live apply / secret promote / `githubUsername` reconcile are operator-gated. P2-R10 dashboard deferred.
+**Status:** Live (14 Aug 2026). Log: [phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md). Scanner Terraform applied in `882248517627` / `us-west-1`; read secrets promoted; Okta `githubUsername` on the tenant; offboarding emit patched in-place. P2-R10 dashboard deferred. First live JSM create armed for 17:00 PT 14 Aug, not yet observed.
 
 **Objective:** After offboarding success, scan GitHub / Linear / Jira (read-only). Ticket + Slack + DynamoDB when seats remain **or** a scan is incomplete.
 
@@ -481,7 +481,8 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 
 **Exit criteria:**
 
-- [ ] Deactivate test leaver → scanner runs → ticket lists exact apps with active seats *(live apply pending)*
+- [x] Scanner stack live: EventBridge `leaver.completed` → Lambda + DLQ + DDB + read secrets (14 Aug apply)
+- [ ] Deactivate test leavers → scanner runs → ticket lists exact apps with active seats *(armed for 17:00 PT 14 Aug; five Okta `endDate`s set; live JSM create not yet observed)*
 - [x] Clean user (no seats, no errors) → `status=clean`, no ticket *(unit)*
 - [x] GitHub **404** → `not_member`; GitHub **401** → `misconfig` (not `not_member`)
 - [x] Jira called at site URL → `misconfig` 401; gateway empty search → `not_member`
@@ -723,4 +724,4 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | [15](15-aws-account-migration-plan.md)         | Target AWS account for new stack                                   |
 | [Phase 0 log](License%20Reclaimer/phase-0-trials-and-credentials.md) | Proven membership APIs + HTTP classification evidence |
 | [Phase 1 log](License%20Reclaimer/phase-1-jsm-foundation.md) | JSM field IDs, request type `4`, project `SUP` |
-| [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda, error contract, operator apply/secret steps |
+| [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda live in `us-west-1`; error contract; seed matrix; apply notes |
