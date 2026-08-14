@@ -7,13 +7,13 @@
     "write_secret": "ohmgym-licenses/github-write",
     "actions": ["remove_org_member"]
   },
-  "figma": {
-    "label": "Figma",
+  "linear": {
+    "label": "Linear",
     "enabled": true,
     "auto_reclaim": false,
-    "read_secret": "ohmgym-licenses/figma-read",
-    "write_secret": "ohmgym-licenses/figma-write",
-    "actions": ["remove_team_member"]
+    "read_secret": "ohmgym-licenses/linear-read",
+    "write_secret": "ohmgym-licenses/linear-write",
+    "actions": ["suspend_user"]
   },
   "jira": {
     "label": "Jira / Atlassian",
@@ -22,5 +22,14 @@
     "read_secret": "ohmgym-licenses/jira-read",
     "write_secret": "ohmgym-licenses/jira-write",
     "actions": ["remove_product_access", "deactivate_user"]
+  },
+  "figma": {
+    "label": "Figma",
+    "enabled": false,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/figma-read",
+    "write_secret": "ohmgym-licenses/figma-write",
+    "actions": ["remove_team_member"],
+    "parked_reason": "Starter plan has no team-members REST endpoint; Organization/Enterprise required. Phase 0 probe 2026-08-13."
   }
 }
