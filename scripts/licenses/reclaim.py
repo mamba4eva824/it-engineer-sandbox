@@ -114,9 +114,10 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
     from linear_client import DEFAULT_ORG_UUID, suspend_user
 
     if app_key == "github":
+        write_token = os.environ.get("GITHUB_WRITE_TOKEN") or os.environ.get("GITHUB_READ_TOKEN", "")
         return remove_org_member(
             org=os.environ.get("GITHUB_ORG", "ohmgym-sandbox"),
-            token=os.environ.get("GITHUB_WRITE_TOKEN", ""),
+            token=write_token,
             login=row.get("github_username") or None,
         )
     if app_key == "linear":
@@ -130,7 +131,7 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
         write_token = os.environ.get("JIRA_WRITE_TOKEN") or os.environ.get("JIRA_API_TOKEN", "")
         read_token = os.environ.get("JIRA_API_TOKEN", "")
         spec = apps_config.get("jira") or {}
-        group_name = spec.get("product_group") or "jira-servicedesk-users"
+        group_name = spec.get("product_group") or "jira-servicemanagement-users-buffett-dev"
         last: dict[str, Any] | None = None
         for action in spec.get("actions") or ["remove_product_access"]:
             if action == "remove_product_access":

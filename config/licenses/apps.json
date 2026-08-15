@@ -22,8 +22,8 @@
     "read_secret": "ohmgym-licenses/jira-read",
     "write_secret": "ohmgym-licenses/jira-write",
     "actions": ["remove_product_access", "deactivate_user"],
-    "product_group": "jira-servicedesk-users",
-    "product_group_note": "Placeholder - confirm the real product-access group name on buffett-dev via GET /rest/api/3/groups/picker before a live apply. remove_product_access is tried first (works with a manage:jira-configuration-scoped API token); deactivate_user is a best-effort second attempt that requires org-admin API access, which personal/non-domain-claimed Atlassian sites like this one likely do not have."
+    "product_group": "jira-servicemanagement-users-buffett-dev",
+    "product_group_note": "Confirmed 14 Aug 2026 via GET /rest/api/3/user/groups on the site admin account - this is the JSM/Support product-access group on buffett-dev (groupId 7f60582b-683f-47de-8611-b6f0e0769866). A leaver may also hold jira-users-buffett-dev (base Jira Software access); remove_product_access only removes the one configured group, so a leaver in both groups keeps base Jira access after reclaim - out of scope for v1 (JSM seat is the billed product). remove_product_access is tried first (works with a manage:jira-configuration-scoped API token); deactivate_user is a best-effort second attempt that requires org-admin API access, which personal/non-domain-claimed Atlassian sites like this one likely do not have."
   },
   "figma": {
     "label": "Figma",

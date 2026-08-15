@@ -4,7 +4,7 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Phase 3 (reclaim broker) is **code-complete, not yet applied** — connectors, Lambda, Terraform, CLI, tests, and CI are built and pass locally; `terraform apply` and write-secret promotion are pending, operator-gated next steps. Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (14 Aug 2026):** Phase 0, Phase 1, Phase 2 (scanner), and Phase 3 (reclaim broker) are all live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Phase 3's broker Lambda, Function URL, DynamoDB GSI, and alarm were applied ~11:07pm; write secrets are not yet promoted with real values and no live reclaim has been run — an explicit next step. Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
@@ -507,7 +507,7 @@ terraform/aws-license-reclaim/
 
 ### Phase 3 — Reclaim Broker (deterministic writes)
 
-**Status:** Code-complete, not yet applied (14 Aug 2026). Log: [phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md).
+**Status:** Applied and live in `us-west-1` (14 Aug 2026). Write secrets not yet promoted; no live reclaim run yet. Log: [phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md).
 
 **Objective:** Allowlisted revoke API. Dry-run default. No Cursor required yet — `curl` / CLI proves the path.
 

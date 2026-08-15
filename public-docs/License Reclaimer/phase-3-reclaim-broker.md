@@ -5,7 +5,7 @@ Allowlisted, deterministic revoke API: `POST /v1/licenses/reclaim` on a Lambda F
 Roadmap: [16-license-reclamation-human-in-the-loop-roadmap.md](../16-license-reclamation-human-in-the-loop-roadmap.md). Prior logs: [phase-0-trials-and-credentials.md](phase-0-trials-and-credentials.md), [phase-1-jsm-foundation.md](phase-1-jsm-foundation.md), [phase-2-license-scanner.md](phase-2-license-scanner.md).
 
 **Date:** 14 Aug 2026
-**Status:** Code + Terraform + tests complete and validated locally (`terraform validate`, `pytest`). **Not yet applied** — no `terraform apply` or live SaaS/AWS write has been run for this phase; that is an explicit human-gated next step (see [Live apply — not yet done](#live-apply--not-yet-done)).
+**Status:** Applied and live in `us-west-1` (account `882248517627`). `terraform apply` ran 14 Aug ~11:07pm UTC (11 resources added, 2 changed, 0 destroyed) under profile `novatech-sandbox`. Broker Lambda, Function URL, GSI, and alarm are all healthy. Write secrets not yet promoted with real values and no live reclaim has been executed — see [Live apply](#live-apply--applied-secrets-not-yet-promoted).
 
 ---
 
@@ -30,11 +30,11 @@ Phase 0 left this open: *"Jira product access — decide whether Phase 2 scans a
 1. `deactivate_user`'s target (`api.atlassian.com/users/{accountId}/manage/lifecycle/disable`) is the Atlassian **User Management / org-admin API** — a different credential family than the Jira Cloud API token already in `.env`. It only works for org admins of a **domain-verified** Atlassian org. `buffett-dev.atlassian.net` is a personal site tied to a `@gmail.com` account, not a domain-claimed org, so this admin surface likely does not exist here regardless of token.
 2. The only real Jira account on the site is `buffett.dev117@gmail.com` — the same account that authenticates every other Jira automation in this repo. Live-probing `deactivate_user` would mean firing a real deactivate call against that account, which is exactly the kind of live write this phase's build was gated on asking first.
 
-Instead, `remove_product_access` (`DELETE /rest/api/3/group/user`, scope `manage:jira-configuration`) was built as the primary path — it works with a normal scoped Jira Cloud API token and a site-admin caller, both of which exist on `buffett-dev`. The operator added `manage:jira-configuration` to the existing `JIRA_API_TOKEN` (rather than minting a second token), so for now the "read" and "write" Jira secrets hold the same underlying token value — the IAM separation between the scanner role and the broker role is still structurally enforced (the scanner role cannot `GetSecretValue` on the write ARN even though the value happens to match today).
+Instead, `remove_product_access` (`DELETE /rest/api/3/group/user`, scope `manage:jira-configuration`) was built as the primary path — it works with a normal scoped Jira Cloud API token and a site-admin caller, both of which exist on `buffett-dev`. `JIRA_API_TOKEN` in `.env` now carries all four needed scopes (`read:jira-work`, `read:jira-user`, `write:jira-work`, `manage:jira-configuration`) on one token — an earlier attempt that only added `manage:jira-configuration` to the token's scope list via Atlassian's "Edit scopes" screen silently *replaced* the existing scopes instead of adding to them (401 `"scope does not match"` on every call, including `/myself`, until it was re-minted with all four together). So for now the "read" and "write" Jira secrets hold the same underlying token value — the IAM separation between the scanner role and the broker role is still structurally enforced (the scanner role cannot `GetSecretValue` on the write ARN even though the value happens to match today).
 
 `config/licenses/apps.json`'s `jira.actions` is `["remove_product_access", "deactivate_user"]` — the broker tries them **in that order**, stopping at the first `"reclaimed"`. `deactivate_user` stays wired as a harmless best-effort second attempt in case a future tenant does have org-admin access, but is not expected to succeed here.
 
-**Open before a live apply:** `product_group` in `apps.json` is a placeholder (`jira-servicedesk-users`). Confirm the real JSM product-access group name on `buffett-dev` via `GET /rest/api/3/groups/picker` before the first live reclaim — this is a read-only call, not yet run.
+**Confirmed (14 Aug 2026):** `product_group` in `apps.json` is now the real group — `jira-servicemanagement-users-buffett-dev` (groupId `7f60582b-683f-47de-8611-b6f0e0769866`), found via `GET /rest/api/3/user/groups` on the site admin account (both read-only). The site admin is also in `jira-users-buffett-dev` (base Jira Software access, a separate product); `remove_product_access` only removes the one configured group, so a leaver who also holds `jira-users-buffett-dev` keeps base Jira access after reclaim — the JSM seat is the billed product this phase targets, so that's accepted as out of scope for v1, not a bug.
 
 ---
 
@@ -85,28 +85,45 @@ python scripts/licenses/reclaim.py --issue SUP-2 --apps github,linear --invoke -
 
 ---
 
-## Live apply — not yet done
+## Live apply — applied, secrets not yet promoted
 
-Nothing in this list has been run. Recorded here so the next session (or Chris) can execute it deliberately, in order:
+Updated 14 Aug 2026, ~11:07pm: `terraform apply` ran successfully.
 
-1. **Mint/confirm write credentials** (see chat history 14 Aug 2026 for the exact scopes):
-   - `GITHUB_WRITE_TOKEN` — classic PAT, `admin:org`, minted by org owner `mamba4eva824`.
-   - `LINEAR_WRITE_KEY` — personal API key from `buffett.dev117@gmail.com` (already admin in `it-systems-sandbox`); operator has since granted the existing `LINEAR_API_KEY` full access, so it may be reused.
-   - `JIRA_WRITE_TOKEN` — done: `manage:jira-configuration` added to the existing `JIRA_API_TOKEN` on `buffett-dev`.
-2. **Confirm the real JSM product-access group name** via `GET /rest/api/3/groups/picker` (read-only) and update `config/licenses/apps.json`'s `jira.product_group` placeholder.
-3. `bash lambdas/license_scanner/build.sh && bash lambdas/license_reclaim_broker/build.sh`
-4. `terraform -chdir=terraform/aws-license-reclaim apply` — adds the GSI to the **live** table (async backfill, no downtime expected on this small table), the broker role/Lambda/Function URL, the broker alarm, and the webhook-secret shell. Requires AWS profile `novatech-sandbox` (account `882248517627`), not `default`/`website-admin`.
-5. Promote secrets:
+```
+Apply complete! Resources: 11 added, 2 changed, 0 destroyed.
+
+broker_function_name       = "ohmgym-license-reclaim-broker"
+broker_function_url        = "https://qfyzllebdanedjk7qbrxehciei0nhxim.lambda-url.us-west-1.on.aws/"
+broker_role_arn            = "arn:aws:iam::882248517627:role/ohmgym-license-reclaim-broker-lambda-exec"
+broker_webhook_secret_name = "ohmgym-licenses/broker-webhook-secret"
+```
+
+The DynamoDB `jira_issue_key-index` GSI backfill took ~6 minutes (normal for a new GSI regardless of table size) but is confirmed `ACTIVE`. The broker Lambda is `Active`/`Successful`. `terraform.tfvars`/state are gitignored and local-only (matches Phase 2's setup) — this stack still has no remote backend.
+
+Steps 1-4 below are done. Remaining before a live reclaim: promote the write secrets (step 5) and a dry-run smoke test (step 6).
+
+1. **Write credentials — done, all via the "upgrade the existing token's scope" pattern (no new env vars):**
+   - GitHub: `GITHUB_READ_TOKEN` re-minted with `admin:org` (confirmed via the `X-OAuth-Scopes` response header — includes `read:org` implicitly). No separate `GITHUB_WRITE_TOKEN`; `reclaim.py`'s local `--apply` path falls back to `GITHUB_READ_TOKEN` when `GITHUB_WRITE_TOKEN` is unset.
+   - Linear: `LINEAR_API_KEY` granted full/admin access in place. No separate `LINEAR_WRITE_KEY`; same fallback pattern already existed for this one.
+   - Jira: `JIRA_API_TOKEN` re-minted with all four scopes together (`read:jira-work`, `read:jira-user`, `write:jira-work`, `manage:jira-configuration`) — a first attempt that only *added* `manage:jira-configuration` via Atlassian's "Edit scopes" screen replaced the scope set instead of extending it (401 `"scope does not match"` on every call, including `/myself`, until re-minted with all four at once).
+   - **Consequence for Secrets Manager:** because none of these are distinct read/write token *values*, `put-secret-value` for each app's `-read` and `-write` secret will use the **same string** for now. The two Secrets Manager entries and the IAM role separation (scanner can't read write ARNs) still hold as a structural boundary — see [Jira write-path decision](#jira-write-path-decision-no-live-call-made) above for the full rationale.
+2. **JSM product-access group — confirmed:** `jira-servicemanagement-users-buffett-dev`, already set in `config/licenses/apps.json`.
+3. **Done.** `bash lambdas/license_scanner/build.sh && bash lambdas/license_reclaim_broker/build.sh`
+4. **Done.** `terraform -chdir=terraform/aws-license-reclaim apply` under AWS profile `novatech-sandbox` (account `882248517627`) — added the GSI to the **live** table (backfill took ~6 minutes, confirmed `ACTIVE`, no downtime), the broker role/Lambda/Function URL, the broker alarm, and the webhook-secret shell.
+5. **Not yet done.** Promote secrets (values match the `-read` secret for each app today, per the note above):
    ```bash
    aws secretsmanager put-secret-value --region us-west-1 \
-     --secret-id ohmgym-licenses/github-write --secret-string "$GITHUB_WRITE_TOKEN"
+     --secret-id ohmgym-licenses/github-write --secret-string "$GITHUB_READ_TOKEN"
    aws secretsmanager put-secret-value --region us-west-1 \
-     --secret-id ohmgym-licenses/linear-write --secret-string "$LINEAR_WRITE_KEY"
+     --secret-id ohmgym-licenses/linear-write --secret-string "$LINEAR_API_KEY"
    aws secretsmanager put-secret-value --region us-west-1 \
-     --secret-id ohmgym-licenses/jira-write --secret-string "$JIRA_WRITE_TOKEN"
+     --secret-id ohmgym-licenses/jira-write --secret-string "$JIRA_API_TOKEN"
+   aws secretsmanager put-secret-value --region us-west-1 \
+     --secret-id ohmgym-licenses/jira-read --secret-string "$JIRA_API_TOKEN"
    aws secretsmanager put-secret-value --region us-west-1 \
      --secret-id ohmgym-licenses/broker-webhook-secret --secret-string "$(openssl rand -hex 32)"
    ```
+   (`jira-read` needs re-promoting too — its previously-promoted value, if any, was the old broken-scope token.)
 6. Dry-run against a real seeded leaver first (e.g. Erin Patel's `SUP-n` ticket from the 14 Aug batch), **then** `--apply` against a single app before trusting the full flow.
 
 ---
@@ -121,6 +138,7 @@ Nothing in this list has been run. Recorded here so the next session (or Chris) 
 | Table (shared with scanner) | `ohmgym-license-reclaim-logs` |
 | New GSI | `jira_issue_key-index` |
 | Broker alarm | `ohmgym-license-reclaim-broker-errors` |
+| Broker Function URL | `https://qfyzllebdanedjk7qbrxehciei0nhxim.lambda-url.us-west-1.on.aws/` |
 | Webhook secret | `ohmgym-licenses/broker-webhook-secret` |
 | Write secrets | `ohmgym-licenses/{github,linear,jira}-write` |
 
@@ -128,9 +146,9 @@ Nothing in this list has been run. Recorded here so the next session (or Chris) 
 
 ## Still open on this phase
 
-- Live-apply steps above — none run yet.
-- Confirm the real JSM product-access group name (currently a placeholder).
-- Decide whether to mint a dedicated `LINEAR_WRITE_KEY` or keep reusing `LINEAR_API_KEY` now that it has full access (ADR-006 prefers separate secrets even when the underlying token is the same for now).
+- `terraform apply`, secret promotion, and the first live reclaim — none run yet (steps 3-6 above).
+- Longer-term: rotate GitHub/Linear/Jira to genuinely separate least-privilege read vs. write tokens instead of one combined-scope token per app (today's fast-path for a sandbox demo, not the ADR-006 end state).
+- `remove_product_access` only removes one group (`jira-servicemanagement-users-buffett-dev`); a leaver also in `jira-users-buffett-dev` keeps base Jira access after reclaim — accepted for v1 (JSM seat is the billed product), revisit if that changes.
 - Live end-to-end smoke test against a real seeded leaver once secrets are promoted.
 
 ## Not in this phase
