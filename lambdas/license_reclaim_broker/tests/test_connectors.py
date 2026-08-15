@@ -157,6 +157,45 @@ def test_jira_remove_product_access_success_is_reclaimed():
     assert result["action_hint"] == "remove_product_access"
 
 
+def test_jira_remove_product_access_prefers_group_id_query_param():
+    with requests_mock.Mocker() as rm:
+        rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[{"accountId": "acc-1", "emailAddress": "marcus.reyes@ohmgym.com"}])
+        rm.delete(f"{GATEWAY}/rest/api/3/group/user", status_code=204)
+        result = remove_product_access(
+            email="marcus.reyes@ohmgym.com",
+            write_token="wt",
+            read_token="rt",
+            auth_email="it-ops@example.com",
+            cloud_id="test-cloud-id",
+            group_name="jira-users-buffett-dev",
+            group_id="f757c432-6ca9-41a9-b956-e4b9396a1cf9",
+        )
+    assert result["status"] == "reclaimed"
+    qs = rm.request_history[-1].qs
+    assert qs["groupid"] == ["f757c432-6ca9-41a9-b956-e4b9396a1cf9"]
+    assert "groupname" not in qs
+
+
+def test_jira_remove_product_access_400_not_a_member_is_idempotent_reclaimed():
+    with requests_mock.Mocker() as rm:
+        rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[{"accountId": "acc-1", "emailAddress": "marcus.reyes@ohmgym.com"}])
+        rm.delete(
+            f"{GATEWAY}/rest/api/3/group/user",
+            status_code=400,
+            text='{"errorMessages":["User is not a member of the group."]}',
+        )
+        result = remove_product_access(
+            email="marcus.reyes@ohmgym.com",
+            write_token="wt",
+            read_token="rt",
+            auth_email="it-ops@example.com",
+            cloud_id="test-cloud-id",
+            group_name="jira-users-buffett-dev",
+        )
+    assert result["status"] == "reclaimed"
+    assert result["http_status"] == 400
+
+
 def test_jira_remove_product_access_already_absent_is_idempotent_reclaimed():
     with requests_mock.Mocker() as rm:
         rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[])

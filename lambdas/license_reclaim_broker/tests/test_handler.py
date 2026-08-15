@@ -180,3 +180,5 @@ def test_jira_tries_remove_product_access_then_deactivate_user(lambda_url_event,
     # must never have been called.
     called_urls = [h.url for h in rm.request_history]
     assert not any("manage/lifecycle/disable" in u for u in called_urls)
+    delete = next(h for h in rm.request_history if h.method == "DELETE")
+    assert delete.qs["groupid"] == ["f757c432-6ca9-41a9-b956-e4b9396a1cf9"]
