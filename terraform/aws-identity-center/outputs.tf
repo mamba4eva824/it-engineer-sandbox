@@ -1,3 +1,18 @@
+output "identity_center_instance_arn" {
+  description = "IAM Identity Center instance ARN (auto-detected or from var)."
+  value       = local.instance_arn
+}
+
+output "identity_store_id" {
+  description = "Identity Store ID (auto-detected or from var)."
+  value       = local.identity_store_id
+}
+
+output "portal_url" {
+  description = "AWS access portal URL for SSO sign-in."
+  value       = local.portal_url
+}
+
 output "developer_permission_set_arn" {
   description = "Developer permission set ARN (PowerUserAccess)."
   value       = aws_ssoadmin_permission_set.developer.arn

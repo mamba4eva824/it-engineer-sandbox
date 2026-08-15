@@ -22,6 +22,12 @@ variable "offboarding_table_name" {
   default     = "ohmgym-offboarding-logs"
 }
 
+variable "license_reclaim_table_name" {
+  description = "License reclaim audit DynamoDB table."
+  type        = string
+  default     = "ohmgym-license-reclaim-logs"
+}
+
 variable "trusted_principal_arns" {
   description = "IAM principal ARNs allowed to assume the GRC audit read role (e.g. website-admin user)."
   type        = list(string)

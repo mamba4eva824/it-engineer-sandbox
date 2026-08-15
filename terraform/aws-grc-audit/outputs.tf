@@ -23,6 +23,11 @@ output "offboarding_table_arn" {
   value       = data.aws_dynamodb_table.offboarding_logs.arn
 }
 
+output "license_reclaim_table_arn" {
+  description = "License reclaim audit table ARN."
+  value       = data.aws_dynamodb_table.license_reclaim_logs.arn
+}
+
 output "aws_cli_profile_snippet" {
   description = "Append to ~/.aws/config for local / Claude Desktop assume-role access."
   value       = <<-EOT

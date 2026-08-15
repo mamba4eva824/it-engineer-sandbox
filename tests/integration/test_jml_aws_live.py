@@ -30,7 +30,10 @@ LAMBDA_NAMES = (
 DYNAMODB_TABLES = (
     "ohmgym-onboarding-logs",
     "ohmgym-offboarding-logs",
+    "ohmgym-license-reclaim-logs",
 )
+
+LICENSE_RECLAIM_TABLE = "ohmgym-license-reclaim-logs"
 
 GRC_AUDIT_ROLE_NAME = "ohmgym-grc-jml-audit-read"
 
@@ -130,6 +133,14 @@ def test_grc_audit_role_allows_read_not_write(dynamodb_client) -> None:
     )
     doc = policy["PolicyDocument"]
     actions = {a for stmt in doc["Statement"] for a in stmt.get("Action", [])}
+    resources: list[str] = []
+    for stmt in doc["Statement"]:
+        resource = stmt.get("Resource", [])
+        if isinstance(resource, str):
+            resources.append(resource)
+        else:
+            resources.extend(resource)
     assert "dynamodb:Query" in actions
     assert "dynamodb:PutItem" not in actions
+    assert any(LICENSE_RECLAIM_TABLE in arn for arn in resources)
     assert GRC_AUDIT_ROLE_NAME in role["Arn"]

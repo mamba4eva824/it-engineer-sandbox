@@ -1,5 +1,5 @@
 resource "aws_ssoadmin_account_assignment" "developers" {
-  instance_arn       = var.identity_center_instance_arn
+  instance_arn       = local.instance_arn
   permission_set_arn = aws_ssoadmin_permission_set.developer.arn
 
   principal_id   = aws_identitystore_group.developers.group_id
@@ -10,7 +10,7 @@ resource "aws_ssoadmin_account_assignment" "developers" {
 }
 
 resource "aws_ssoadmin_account_assignment" "grc" {
-  instance_arn       = var.identity_center_instance_arn
+  instance_arn       = local.instance_arn
   permission_set_arn = aws_ssoadmin_permission_set.jml_audit_readonly.arn
 
   principal_id   = aws_identitystore_group.grc.group_id

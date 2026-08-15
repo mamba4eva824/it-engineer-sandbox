@@ -37,6 +37,16 @@
         "AWS_API_MCP_PROFILE_NAME": "default"
       }
     },
+    "aws-grc-audit": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-api-mcp-server@latest"
+      ],
+      "env": {
+        "AWS_REGION": "us-west-1",
+        "AWS_API_MCP_PROFILE_NAME": "ohmgym-grc-jml-audit"
+      }
+    },
     "linear": {
       "url": "https://mcp.linear.app/mcp",
       "transport": "http"

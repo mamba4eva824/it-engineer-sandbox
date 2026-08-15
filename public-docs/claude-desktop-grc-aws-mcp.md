@@ -1,6 +1,6 @@
 # Claude Desktop — AWS MCP for GRC JML Audit Queries
 
-Operator guide for querying `ohmgym-onboarding-logs` and `ohmgym-offboarding-logs` via Claude Desktop using the `ohmgym-grc-jml-audit-read` IAM role.
+Operator guide for querying `ohmgym-onboarding-logs`, `ohmgym-offboarding-logs`, and `ohmgym-license-reclaim-logs` via Claude Desktop using the `ohmgym-grc-jml-audit-read` IAM role.
 
 Companion: [12-grc-jml-audit-access.md](12-grc-jml-audit-access.md)
 
@@ -46,6 +46,7 @@ Restart Claude Desktop after editing.
 |-------------------------|---------|
 | `off-boarding-logs` | `ohmgym-offboarding-logs` |
 | `onboarding-logs` | `ohmgym-onboarding-logs` |
+| `license-reclaim-logs` | `ohmgym-license-reclaim-logs` |
 | `us-east-1` | `us-west-1` |
 
 ## 4. Example prompts (copy-paste)
@@ -63,6 +64,11 @@ Use partition key run_date. Max 20 items.
 ```
 
 ```
+Query ohmgym-license-reclaim-logs in us-west-1 where run_date = "2026-08-15".
+Return login, status, apps, and jira_issue_key.
+```
+
+```
 DescribeTable on ohmgym-offboarding-logs in us-west-1 to confirm the table exists.
 ```
 
@@ -74,6 +80,9 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py \
 
 AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py \
   --table onboarding --date 2026-06-15
+
+AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py \
+  --table reclaim --date 2026-08-15
 ```
 
 ## Troubleshooting
@@ -86,6 +95,7 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py \
 
 - `arn:aws:dynamodb:us-west-1:882248517627:table/ohmgym-onboarding-logs`
 - `arn:aws:dynamodb:us-west-1:882248517627:table/ohmgym-offboarding-logs`
+- `arn:aws:dynamodb:us-west-1:882248517627:table/ohmgym-license-reclaim-logs`
 
 Access denied in `us-east-1` is **expected** — it does not mean the policy is missing.
 
@@ -118,5 +128,5 @@ GRC role is read-only. `PutItem` must return `AccessDeniedException` — that is
 
 | Allowed | Denied |
 |---------|--------|
-| `Query`, `Scan`, `GetItem`, `BatchGetItem`, `DescribeTable` on two audit tables | `PutItem`, `UpdateItem`, `DeleteItem` |
+| `Query`, `Scan`, `GetItem`, `BatchGetItem`, `DescribeTable` on three audit tables | `PutItem`, `UpdateItem`, `DeleteItem` |
 | `us-west-1` only | Other regions, Secrets Manager, Lambda, S3 |
