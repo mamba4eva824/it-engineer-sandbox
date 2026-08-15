@@ -32,7 +32,7 @@ DEFAULT_OUT = Path(__file__).parent.parent.parent / "config" / "okta" / "desired
 
 # Attributes we manage via config-as-code. Ignore everything else Okta adds
 # to the default schema (firstName, lastName, login, etc. are built-in).
-MANAGED_ATTRS = {"role_title", "managerEmail", "startDate"}
+MANAGED_ATTRS = {"role_title", "managerEmail", "startDate", "endDate", "githubUsername"}
 
 
 def export_profile_attributes(session) -> list[dict]:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -78,6 +79,59 @@ def test_deactivate_flow(reset_token_cache, empty_audit_table, okta_user_factory
     assert result["event"] == "offboarding_batch_complete"
     assert any("lifecycle/deactivate" in r.url for r in rm.request_history)
     assert any(r.method == "DELETE" and "/sessions" in r.url for r in rm.request_history)
+
+
+@freeze_time(f"{TODAY}T16:00:00+00:00")
+def test_deactivate_emits_leaver_completed(reset_token_cache, empty_audit_table, okta_user_factory):
+    user = okta_user_factory(
+        user_id="00uA", login="a@ohmgym.com", end_date=TODAY, github_username="octocat",
+        first_name="Alice", last_name="Anderson",
+    )
+    captured: list[dict] = []
+
+    def _put_events(Entries):  # noqa: N803
+        captured.extend(Entries)
+        return {"FailedEntryCount": 0, "Entries": [{"EventId": "evt-1"}]}
+
+    with requests_mock.Mocker() as rm:
+        _mock_okta_token(rm)
+        _mock_okta_search(rm, [user])
+        _mock_sessions(rm, "00uA")
+        _mock_deactivate(rm, "00uA")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events", side_effect=_put_events):
+            result = handler.lambda_handler({}, None)
+    assert result["deactivated_count"] == 1
+    assert result["error_count"] == 0
+    assert len(captured) == 1
+    assert captured[0]["Source"] == "ohmgym.offboarding"
+    assert captured[0]["DetailType"] == "leaver.completed"
+    detail = json.loads(captured[0]["Detail"])
+    assert detail["user_email"] == "a@ohmgym.com"
+    assert detail["okta_id"] == "00uA"
+    assert detail["run_date"] == TODAY
+    assert detail["github_username"] == "octocat"
+    assert detail["run_id"]
+    assert detail["first_name"] == "Alice"
+    assert detail["last_name"] == "Anderson"
+
+
+@freeze_time(f"{TODAY}T16:00:00+00:00")
+def test_put_events_failure_does_not_abort_batch(reset_token_cache, empty_audit_table, okta_user_factory):
+    user = okta_user_factory(user_id="00uA", login="a@ohmgym.com", end_date=TODAY)
+    with requests_mock.Mocker() as rm:
+        _mock_okta_token(rm)
+        _mock_okta_search(rm, [user])
+        _mock_sessions(rm, "00uA")
+        _mock_deactivate(rm, "00uA")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events", side_effect=RuntimeError("bus unavailable")):
+            result = handler.lambda_handler({}, None)
+    assert result["deactivated_count"] == 1
+    assert result["error_count"] == 1
+    assert "leaver_completed_emit" in result["errors"][0]["error"]
+    assert result["slack"]["posted"] is True
+    assert any("lifecycle/deactivate" in r.url for r in rm.request_history)
 
 
 @freeze_time(f"{TODAY}T16:00:00+00:00")

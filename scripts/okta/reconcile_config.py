@@ -37,7 +37,7 @@ from _client import api_url, get_session, paginate
 DEFAULT_IN = Path(__file__).parent.parent.parent / "config" / "okta" / "desired-state.json"
 REPORTS_DIR = Path(__file__).parent.parent.parent / "public-docs" / "reports"
 
-MANAGED_ATTRS = {"role_title", "managerEmail", "startDate", "endDate"}
+MANAGED_ATTRS = {"role_title", "managerEmail", "startDate", "endDate", "githubUsername"}
 
 
 # ---------------- Load desired state ----------------

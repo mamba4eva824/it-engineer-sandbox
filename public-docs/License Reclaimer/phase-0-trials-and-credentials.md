@@ -5,7 +5,7 @@ License Reclamation sandbox: stand up non-SCIM SaaS tenants with **read-only mem
 Roadmap: [16-license-reclamation-human-in-the-loop-roadmap.md](../16-license-reclamation-human-in-the-loop-roadmap.md). Companion log: [phase-1-jsm-foundation.md](phase-1-jsm-foundation.md) (JSM intake already exists on the same Jira site).
 
 **Date:** 13 Aug 2026  
-**Status:** Complete for v1 catalog (GitHub + Jira + Linear). Figma parked. Demo user seeding (P0-R5) still open.
+**Status:** Complete for v1 catalog (GitHub + Jira + Linear). Figma parked. Demo user seeding (P0-R5) mixed-seat set on 14 Aug 2026 — see [phase-2-license-scanner.md](phase-2-license-scanner.md).
 
 ---
 
@@ -38,7 +38,7 @@ Maps to: API-driven SaaS integrations, least privilege, catching orphaned seats 
 | P0-R2 | Figma team + token that lists members | **Partial / parked.** Team + PAT exist; `GET /v1/teams/{id}/members` is **404** (route not in OpenAPI). Replaced by Linear for the third connector. |
 | P0-R3 | Existing Jira/JSM + token for issue create and user lookup | **Met.** Reused `buffett-dev`; scoped token `read:jira-work`, `read:jira-user`, `write:jira-work`. |
 | P0-R4 | OIN / SSO notes per app | **Met.** See below. All three v1 apps: SSO/SCIM gated on paid tiers; reclaim stays API-side. |
-| P0-R5 | Seed 2–3 test users mirrored to Okta leavers | **Open.** Invites skipped on purpose so GitHub / Figma / Linear / Jira get the same demo identities in one pass. |
+| P0-R5 | Seed 2–3 test users mirrored to Okta leavers | **Partial (14 Aug 2026).** Five Okta leavers with mixed seats; not identical on all three apps. Marcus Lee has no licenses on purpose. Matrix: [phase-2-license-scanner.md](phase-2-license-scanner.md). |
 
 **Exit criterion** (roadmap): *Manual curl/Python can answer “is user X a member?” for all three apps.* **Met** for the v1 trio after substituting Linear for Figma.
 
