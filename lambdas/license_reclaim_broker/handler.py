@@ -29,7 +29,8 @@ Handler flow (mirrors the scanner's per-app continue-on-error style, ADR-010):
   6. Live: call the per-app write function independently (one app's failure
      never blocks another); merge outcomes into the row's `reclaim` list and
      roll the row's overall `status` up to `reclaimed` (all active apps
-     succeeded) or `partial`.
+     succeeded), `No Licenses to Reclaim` (no scan-`active` seats), or
+     `partial`.
   7. Best-effort Jira comment summarizing outcomes — failure is logged, never
      raises (mirrors the scanner's Slack-is-best-effort contract).
 
@@ -54,8 +55,9 @@ if _SCRIPTS_LICENSES.is_dir():
     sys.path.insert(0, str(_SCRIPTS_LICENSES))
 
 from github_client import remove_org_member  # noqa: E402
-from jira_client import add_comment, deactivate_user, remove_product_access  # noqa: E402
+from jira_client import add_comment, deactivate_user, product_access_groups, remove_product_access  # noqa: E402
 from linear_client import DEFAULT_ORG_UUID, suspend_user  # noqa: E402
+from row_status import compute_reclaim_row_status  # noqa: E402
 
 SECRETS_REGION = os.environ.get("SECRETS_REGION", "us-west-1")
 WEBHOOK_SECRET_NAME = os.environ["WEBHOOK_SECRET_NAME"]
@@ -140,13 +142,16 @@ def _existing_reclaim(row: dict[str, Any], app_key: str) -> dict[str, Any] | Non
     return None
 
 
-def plan_for_app(app_key: str, row: dict[str, Any]) -> dict[str, Any]:
+def plan_for_app(app_key: str, row: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     """Idempotent + P3-R5 eligibility check. Never returns "eligible" for a
     scan status of "error" or "identity_unresolved" — only "active" apps
     (the scan-result vocabulary) are ever revocable.
+
+    `force=True` re-runs an already-`reclaimed` app (needed when product-access
+    groups are added after the first successful revoke).
     """
     existing = _existing_reclaim(row, app_key)
-    if existing and existing.get("status") == "reclaimed":
+    if existing and existing.get("status") == "reclaimed" and not force:
         return {"app": app_key, "outcome": "already_reclaimed"}
     finding = _finding_for_app(row, app_key)
     if not finding or finding.get("status") != "active":
@@ -176,6 +181,7 @@ def validate_request(
         "issue_key": issue_key,
         "requested_by": str(body.get("requested_by") or "").strip() or "unknown",
         "dry_run": bool(body.get("dry_run", True)),
+        "force": bool(body.get("force", False)),
     }, apps
 
 
@@ -214,8 +220,7 @@ def _revoke_jira(row: dict[str, Any], write_token: str, apps_config: dict[str, A
     """
     read_token = _fetch_secret(JIRA_READ_SECRET_NAME)
     spec = apps_config.get("jira") or {}
-    group_name = spec.get("product_group") or "jira-users-buffett-dev"
-    group_id = spec.get("product_group_id")
+    groups = product_access_groups(spec)
     last: dict[str, Any] | None = None
     for action in spec.get("actions") or ["remove_product_access"]:
         if action == "remove_product_access":
@@ -225,8 +230,7 @@ def _revoke_jira(row: dict[str, Any], write_token: str, apps_config: dict[str, A
                 read_token=read_token,
                 auth_email=JIRA_EMAIL,
                 cloud_id=JIRA_CLOUD_ID,
-                group_name=group_name,
-                group_id=group_id,
+                groups=groups,
             )
         elif action == "deactivate_user":
             result = deactivate_user(
@@ -270,18 +274,14 @@ def revoke_one(app_key: str, row: dict[str, Any], apps_config: dict[str, Any]) -
 def update_reclaim(row: dict[str, Any], results: list[dict[str, Any]], requested_by: str) -> str:
     """Merge new per-app outcomes onto the row's `reclaim` list; return the
     row's new overall status (`reclaimed` if every active app has succeeded,
-    else `partial`).
+    `No Licenses to Reclaim` if none were active, else `partial`).
     """
     merged_by_app = {r["app"]: r for r in (row.get("reclaim") or [])}
     for res in results:
         merged_by_app[res["app"]] = res
     merged = list(merged_by_app.values())
 
-    active_apps = [a["app"] for a in row.get("apps") or [] if a.get("status") == "active"]
-    all_reclaimed = bool(active_apps) and all(
-        (merged_by_app.get(a) or {}).get("status") == "reclaimed" for a in active_apps
-    )
-    new_status = "reclaimed" if all_reclaimed else "partial"
+    new_status = compute_reclaim_row_status(row.get("apps") or [], merged_by_app)
 
     _table.update_item(
         Key={"run_date": row["run_date"], "user_id": row["user_id"]},
@@ -336,7 +336,7 @@ def lambda_handler(event, context):  # noqa: ARG001
     if not row:
         return _http_response(404, {"error": f"no findings for issue_key {req['issue_key']}"})
 
-    plan = [plan_for_app(app_key, row) for app_key in requested_apps]
+    plan = [plan_for_app(app_key, row, force=req["force"]) for app_key in requested_apps]
 
     if req["dry_run"]:
         result = {

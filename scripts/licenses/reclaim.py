@@ -92,9 +92,9 @@ def _existing_reclaim(row: dict[str, Any], app_key: str) -> dict[str, Any] | Non
     return None
 
 
-def _plan_for_app(app_key: str, row: dict[str, Any]) -> dict[str, Any]:
+def _plan_for_app(app_key: str, row: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
     existing = _existing_reclaim(row, app_key)
-    if existing and existing.get("status") == "reclaimed":
+    if existing and existing.get("status") == "reclaimed" and not force:
         return {"app": app_key, "outcome": "already_reclaimed"}
     finding = _finding_for_app(row, app_key)
     if not finding or finding.get("status") != "active":
@@ -110,7 +110,7 @@ def _load_apps_config() -> dict[str, Any]:
 def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, Any]) -> dict[str, Any]:
     sys.path.insert(0, str(LICENSES_DIR))
     from github_client import remove_org_member
-    from jira_client import deactivate_user, remove_product_access
+    from jira_client import deactivate_user, product_access_groups, remove_product_access
     from linear_client import DEFAULT_ORG_UUID, suspend_user
 
     if app_key == "github":
@@ -131,8 +131,7 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
         write_token = os.environ.get("JIRA_WRITE_TOKEN") or os.environ.get("JIRA_API_TOKEN", "")
         read_token = os.environ.get("JIRA_API_TOKEN", "")
         spec = apps_config.get("jira") or {}
-        group_name = spec.get("product_group") or "jira-users-buffett-dev"
-        group_id = spec.get("product_group_id")
+        groups = product_access_groups(spec)
         last: dict[str, Any] | None = None
         for action in spec.get("actions") or ["remove_product_access"]:
             if action == "remove_product_access":
@@ -142,8 +141,7 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
                     read_token=read_token,
                     auth_email=os.environ.get("JIRA_EMAIL", ""),
                     cloud_id=os.environ.get("JIRA_CLOUD_ID", ""),
-                    group_name=group_name,
-                    group_id=group_id,
+                    groups=groups,
                 )
             elif action == "deactivate_user":
                 result = deactivate_user(
@@ -165,17 +163,16 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
 def _update_reclaim_local(row: dict[str, Any], results: list[dict[str, Any]], requested_by: str) -> str:
     from datetime import datetime, timezone
 
+    from row_status import compute_reclaim_row_status
+
     table = _dynamodb_table()
+
     merged_by_app = {r["app"]: r for r in (row.get("reclaim") or [])}
     for res in results:
         merged_by_app[res["app"]] = res
     merged = list(merged_by_app.values())
 
-    active_apps = [a["app"] for a in row.get("apps") or [] if a.get("status") == "active"]
-    all_reclaimed = bool(active_apps) and all(
-        (merged_by_app.get(a) or {}).get("status") == "reclaimed" for a in active_apps
-    )
-    new_status = "reclaimed" if all_reclaimed else "partial"
+    new_status = compute_reclaim_row_status(row.get("apps") or [], merged_by_app)
     now_iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     table.update_item(
@@ -201,7 +198,7 @@ def _run_local(args: argparse.Namespace) -> dict[str, Any]:
     if not row:
         return {"error": f"no findings for issue_key {args.issue}"}
 
-    plan = [_plan_for_app(a, row) for a in requested_apps]
+    plan = [_plan_for_app(a, row, force=args.force) for a in requested_apps]
 
     if not args.apply:
         return {
@@ -249,6 +246,7 @@ def _run_invoke(args: argparse.Namespace) -> dict[str, Any]:
         "requested_by": args.requested_by,
         "apps": [a.strip() for a in args.apps.split(",") if a.strip()],
         "dry_run": not args.apply,
+        "force": bool(args.force),
     }
     resp = requests.post(
         url,
@@ -281,6 +279,11 @@ def main() -> int:
         "--invoke",
         action="store_true",
         help="Call the deployed broker Function URL instead of running connectors locally.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-run apps already marked reclaimed (e.g. after product-access groups were added).",
     )
     args = parser.parse_args()
 

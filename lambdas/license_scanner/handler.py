@@ -43,6 +43,10 @@ from jira_client import (  # noqa: E402
     update_issue,
 )
 from linear_client import DEFAULT_ORG_UUID, scan_linear  # noqa: E402
+from row_status import (  # noqa: E402
+    NO_LICENSES_TO_RECLAIM,
+    compute_scan_row_status,
+)
 
 SECRETS_REGION = os.environ.get("SECRETS_REGION", "us-west-1")
 SLACK_BOT_TOKEN_SECRET_NAME = os.environ["SLACK_BOT_TOKEN_SECRET_NAME"]
@@ -228,18 +232,7 @@ def _enabled(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def compute_row_status(findings: list[dict[str, Any]]) -> tuple[str, str | None]:
-    enabled = _enabled(findings)
-    errors = [a for a in enabled if a.get("status") == "error"]
-    actives = [a for a in enabled if a.get("status") == "active"]
-    if not enabled:
-        return "clean", None
-    if errors and len(errors) == len(enabled):
-        return "error", "all_connectors_failed"
-    if errors:
-        return "partial", None
-    if actives:
-        return "ticketed", None
-    return "clean", None
+    return compute_scan_row_status(findings)
 
 
 def needs_ticket(findings: list[dict[str, Any]]) -> bool:
@@ -466,10 +459,10 @@ def _slack_summary(
     actives = active_app_keys(findings)
     errors = _connector_error_apps(findings)
     identity = _identity_apps(findings)
-    if row_status == "clean":
+    if row_status == NO_LICENSES_TO_RECLAIM and not errors and not identity:
         text = (
-            f":white_check_mark: License scan clean — {payload['user_email']} "
-            f"(no seats, no errors)"
+            f":white_check_mark: License scan — {payload['user_email']} "
+            f"(no licenses to reclaim)"
         )
     else:
         text = (

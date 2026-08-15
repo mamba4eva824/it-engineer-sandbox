@@ -24,7 +24,19 @@
     "actions": ["remove_product_access", "deactivate_user"],
     "product_group": "jira-users-buffett-dev",
     "product_group_id": "f757c432-6ca9-41a9-b956-e4b9396a1cf9",
-    "product_group_note": "Jira Software product-access group on buffett-dev (site default jira-users-{site}). This is the group seed leavers were invited into (Erin/Ned/Tyrion confirmed via GET /rest/api/3/user/groups). groupId from that same call. remove_product_access prefers groupId over the deprecated groupname query param. A leaver may also hold jira-servicemanagement-users-buffett-dev (JSM product access, a separate product); v1 only removes the one configured group. remove_product_access is tried first (manage:jira-configuration-scoped API token); deactivate_user is a best-effort second attempt that requires org-admin API access, which personal/non-domain-claimed Atlassian sites like this one likely do not have."
+    "product_groups": [
+      {
+        "name": "jira-users-buffett-dev",
+        "id": "f757c432-6ca9-41a9-b956-e4b9396a1cf9",
+        "product": "jira_software"
+      },
+      {
+        "name": "confluence-users-buffett-dev",
+        "id": "1057bb4d-3c22-4e72-898f-d99cbdea8c97",
+        "product": "confluence"
+      }
+    ],
+    "product_group_note": "Product-access groups on buffett-dev. remove_product_access deletes the account from every entry in product_groups (same manage:jira-configuration token; no Confluence REST scopes). product_group / product_group_id stay the Jira Software group for older callers. Seed leavers (Erin/Ned/Tyrion) were invited into jira-users-buffett-dev and also landed in confluence-users-buffett-dev. jira-servicemanagement-users-buffett-dev (JSM) is still not in this list. deactivate_user remains a best-effort second attempt that needs org-admin API access, which this personal/non-domain-claimed site likely does not have."
   },
   "figma": {
     "label": "Figma",

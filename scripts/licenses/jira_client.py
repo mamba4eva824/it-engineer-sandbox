@@ -383,75 +383,31 @@ def deactivate_user(
     )
 
 
-def remove_product_access(
-    *,
-    email: str,
-    write_token: str,
-    read_token: str,
-    auth_email: str,
-    cloud_id: str,
-    group_name: str,
-    group_id: str | None = None,
-) -> dict[str, Any]:
-    """Revoke Jira product access by removing the account from a product-access group.
+def product_access_groups(spec: dict[str, Any]) -> list[tuple[str, str | None]]:
+    """Groups `remove_product_access` must delete the account from.
 
-    Fallback for sites without org-admin API access (personal / non-domain-claimed
-    sites): DELETE /rest/api/3/group/user via the standard gateway + a Basic-auth
-    token scoped `manage:jira-configuration`, instead of the org-admin
-    lifecycle/disable endpoint that `deactivate_user` uses. 200/204/404 are success
-    (404 = user already not in the group, or already gone entirely). Jira Cloud
-    returns 400 "is not a member of the group" for the same case — also treated
-    as idempotent reclaimed so the broker does not fall through to deactivate_user.
-
-    Prefers `groupId` when provided (Cloud deprecated `groupname`). Only removes
-    the one configured group. If the account has product access via multiple
-    groups, callers may need to run this once per group.
+    Prefers `product_groups` (name + id per product). Falls back to the
+    single `product_group` / `product_group_id` pair used before Confluence.
     """
-    account_id, lookup_error = lookup_account_id(
-        email=email,
-        token=read_token,
-        auth_email=auth_email,
-        cloud_id=cloud_id,
-    )
-    if lookup_error:
-        lookup_error["action_hint"] = "remove_product_access"
-        return lookup_error
-    if not account_id:
-        return finding(
-            app="jira",
-            status="reclaimed",
-            seat_type=SEAT_TYPE,
-            action_hint="remove_product_access",
-            http_status=200,
-            error="Jira account already absent",
-        )
+    raw = spec.get("product_groups")
+    if isinstance(raw, list) and raw:
+        out: list[tuple[str, str | None]] = []
+        for item in raw:
+            if isinstance(item, dict):
+                name = str(item.get("name") or "").strip()
+                gid = item.get("id")
+                if name or gid:
+                    out.append((name, str(gid) if gid else None))
+            elif isinstance(item, str) and item.strip():
+                out.append((item.strip(), None))
+        if out:
+            return out
+    name = str(spec.get("product_group") or "jira-users-buffett-dev")
+    gid = spec.get("product_group_id")
+    return [(name, str(gid) if gid else None)]
 
-    url = f"{gateway_base(cloud_id)}/rest/api/3/group/user"
-    params: dict[str, str] = {"accountId": account_id}
-    if group_id:
-        params["groupId"] = group_id
-    else:
-        params["groupname"] = group_name
-    try:
-        resp = request_with_retry(
-            "DELETE",
-            url,
-            params=params,
-            auth=_auth(auth_email, write_token),
-            headers={"Accept": "application/json"},
-            timeout=15,
-        )
-    except (requests.Timeout, requests.ConnectionError) as exc:
-        return finding(
-            app="jira",
-            status="error",
-            seat_type=SEAT_TYPE,
-            action_hint="remove_product_access",
-            error_class="retryable",
-            retryable=True,
-            error=str(exc),
-        )
 
+def _classify_group_delete(resp: requests.Response) -> dict[str, Any]:
     if resp.status_code in (200, 204, 404):
         return finding(
             app="jira",
@@ -460,7 +416,6 @@ def remove_product_access(
             action_hint="remove_product_access",
             http_status=resp.status_code,
         )
-    # Jira Cloud: user exists but is already absent from this product-access group.
     if resp.status_code == 400:
         body = (resp.text or "").lower()
         if "not a member" in body or "not in the group" in body or "not in this group" in body:
@@ -494,4 +449,98 @@ def remove_product_access(
         http_status=resp.status_code,
         retryable=error_class == "retryable",
         error=truncate_error(resp.text) or f"Jira HTTP {resp.status_code}",
+    )
+
+
+def remove_product_access(
+    *,
+    email: str,
+    write_token: str,
+    read_token: str,
+    auth_email: str,
+    cloud_id: str,
+    group_name: str | None = None,
+    group_id: str | None = None,
+    groups: list[tuple[str, str | None]] | None = None,
+) -> dict[str, Any]:
+    """Revoke product access by removing the account from configured groups.
+
+    Fallback for sites without org-admin API access (personal / non-domain-claimed
+    sites): DELETE /rest/api/3/group/user via the standard gateway + a Basic-auth
+    token scoped `manage:jira-configuration`, instead of the org-admin
+    lifecycle/disable endpoint that `deactivate_user` uses. 200/204/404 are success
+    (404 = user already not in the group, or already gone entirely). Jira Cloud
+    returns 400 "is not a member of the group" for the same case — also treated
+    as idempotent reclaimed so the broker does not fall through to deactivate_user.
+
+    Prefers `groupId` when provided (Cloud deprecated `groupname`). Walks every
+    group in `groups` (Jira Software + Confluence on buffett-dev). One group's
+    failure is returned and remaining groups are not claimed as reclaimed.
+    """
+    targets = groups or [(group_name or "jira-users-buffett-dev", group_id)]
+    account_id, lookup_error = lookup_account_id(
+        email=email,
+        token=read_token,
+        auth_email=auth_email,
+        cloud_id=cloud_id,
+    )
+    if lookup_error:
+        lookup_error["action_hint"] = "remove_product_access"
+        return lookup_error
+    if not account_id:
+        return finding(
+            app="jira",
+            status="reclaimed",
+            seat_type=SEAT_TYPE,
+            action_hint="remove_product_access",
+            http_status=200,
+            error="Jira account already absent",
+        )
+
+    url = f"{gateway_base(cloud_id)}/rest/api/3/group/user"
+    last: dict[str, Any] | None = None
+    removed: list[str] = []
+    for name, gid in targets:
+        params: dict[str, str] = {"accountId": account_id}
+        if gid:
+            params["groupId"] = gid
+        else:
+            params["groupname"] = name
+        label = name or gid or "group"
+        try:
+            resp = request_with_retry(
+                "DELETE",
+                url,
+                params=params,
+                auth=_auth(auth_email, write_token),
+                headers={"Accept": "application/json"},
+                timeout=15,
+            )
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            return finding(
+                app="jira",
+                status="error",
+                seat_type=SEAT_TYPE,
+                action_hint="remove_product_access",
+                error_class="retryable",
+                retryable=True,
+                error=f"{label}: {exc}",
+            )
+        outcome = _classify_group_delete(resp)
+        if outcome.get("status") != "reclaimed":
+            err = outcome.get("error") or f"Jira HTTP {outcome.get('http_status')}"
+            outcome["error"] = truncate_error(f"{label}: {err}")
+            return outcome
+        removed.append(label)
+        last = outcome
+    if last is not None:
+        last["removed_groups"] = removed
+    return last or finding(
+        app="jira",
+        status="error",
+        seat_type=SEAT_TYPE,
+        action_hint="remove_product_access",
+        error_class="misconfig",
+        retryable=False,
+        error="no product-access group configured",
     )

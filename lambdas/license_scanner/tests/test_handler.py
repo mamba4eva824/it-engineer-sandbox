@@ -161,11 +161,11 @@ def test_clean_user_no_ticket(empty_table):
         _mock_jira_not_member(rm)
         _mock_slack(rm)
         result = handler.lambda_handler(_event(), None)
-    assert result["status"] == "clean"
+    assert result["status"] == "No Licenses to Reclaim"
     assert result["jira_issue_key"] is None
     assert _issue_creates(rm) == []
     item = empty_table.get_item(Key={"run_date": RUN_DATE, "user_id": OKTA_ID})["Item"]
-    assert item["status"] == "clean"
+    assert item["status"] == "No Licenses to Reclaim"
     figma = next(a for a in result["apps"] if a["app"] == "figma")
     assert figma["status"] == "skipped"
 
@@ -228,7 +228,8 @@ def test_identity_unresolved_tickets_without_github_http(empty_table):
     assert any(a["app"] == "github" and a["error_class"] == "identity_unresolved" for a in result["apps"])
     assert not any("api.github.com" in (r.url or "") for r in rm.request_history)
     assert len(_issue_creates(rm)) == 1
-    assert result["status"] in ("partial", "error")
+    assert result["status"] == "No Licenses to Reclaim"
+    assert result["ticket_wanted"] is True
     slack_posts = [
         r for r in rm.request_history
         if r.method == "POST" and "chat.postMessage" in (r.url or "")
@@ -315,7 +316,7 @@ def test_slack_failure_does_not_raise_on_clean(empty_table):
         _mock_jira_not_member(rm)
         _mock_slack(rm, ok=False)
         result = handler.lambda_handler(_event(), None)
-    assert result["status"] == "clean"
+    assert result["status"] == "No Licenses to Reclaim"
     assert result["slack"]["posted"] is False
 
 
@@ -339,7 +340,7 @@ def test_eventbridge_envelope(empty_table):
         _mock_jira_not_member(rm)
         _mock_slack(rm)
         result = handler.lambda_handler(_eb_event(_event()), None)
-    assert result["status"] == "clean"
+    assert result["status"] == "No Licenses to Reclaim"
 
 
 def test_all_connectors_failed_raises(empty_table):

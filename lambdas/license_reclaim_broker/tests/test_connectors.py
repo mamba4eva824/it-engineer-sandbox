@@ -13,7 +13,7 @@ import requests_mock
 from conftest import GATEWAY, TEST_ORG
 
 from github_client import remove_org_member
-from jira_client import deactivate_user, remove_product_access
+from jira_client import deactivate_user, product_access_groups, remove_product_access
 from linear_client import suspend_user
 
 
@@ -226,6 +226,68 @@ def test_jira_remove_product_access_403_is_misconfig_mentions_scope():
     assert result["status"] == "error"
     assert result["error_class"] == "misconfig"
     assert "manage:jira-configuration" in result["error"]
+
+
+def test_jira_remove_product_access_loops_all_groups_and_stops_on_error():
+    groups = [
+        ("jira-users-buffett-dev", "gid-jira"),
+        ("confluence-users-buffett-dev", "gid-confluence"),
+    ]
+    with requests_mock.Mocker() as rm:
+        rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[{"accountId": "acc-1", "emailAddress": "marcus.reyes@ohmgym.com"}])
+        rm.delete(f"{GATEWAY}/rest/api/3/group/user", status_code=204)
+        result = remove_product_access(
+            email="marcus.reyes@ohmgym.com",
+            write_token="wt",
+            read_token="rt",
+            auth_email="it-ops@example.com",
+            cloud_id="test-cloud-id",
+            groups=groups,
+        )
+    assert result["status"] == "reclaimed"
+    assert result["removed_groups"] == ["jira-users-buffett-dev", "confluence-users-buffett-dev"]
+    deletes = [h for h in rm.request_history if h.method == "DELETE"]
+    assert [h.qs["groupid"][0] for h in deletes] == ["gid-jira", "gid-confluence"]
+
+    with requests_mock.Mocker() as rm:
+        rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[{"accountId": "acc-1", "emailAddress": "marcus.reyes@ohmgym.com"}])
+        rm.delete(
+            f"{GATEWAY}/rest/api/3/group/user",
+            [
+                {"status_code": 204},
+                {"status_code": 403, "text": ""},
+            ],
+        )
+        result = remove_product_access(
+            email="marcus.reyes@ohmgym.com",
+            write_token="wt",
+            read_token="rt",
+            auth_email="it-ops@example.com",
+            cloud_id="test-cloud-id",
+            groups=groups,
+        )
+    assert result["status"] == "error"
+    assert result["error_class"] == "misconfig"
+    assert "confluence-users-buffett-dev" in (result.get("error") or "")
+
+
+def test_product_access_groups_reads_config_list():
+    groups = product_access_groups({
+        "product_group": "legacy-only",
+        "product_group_id": "legacy-id",
+        "product_groups": [
+            {"name": "jira-users-buffett-dev", "id": "gid-jira"},
+            {"name": "confluence-users-buffett-dev", "id": "gid-confluence"},
+        ],
+    })
+    assert groups == [
+        ("jira-users-buffett-dev", "gid-jira"),
+        ("confluence-users-buffett-dev", "gid-confluence"),
+    ]
+    assert product_access_groups({
+        "product_group": "jira-users-buffett-dev",
+        "product_group_id": "gid-jira",
+    }) == [("jira-users-buffett-dev", "gid-jira")]
 
 
 def test_jira_deactivate_user_403_is_misconfig_mentions_org_admin():

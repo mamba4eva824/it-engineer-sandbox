@@ -38,7 +38,7 @@ Parse `customfield_10141` as app keys (split on comma, trim, lowercase). Ignore 
 - Requested apps are missing from the ticket list or from the allowlist.
 - Ticket has no confirmed apps (`none` / empty) and the user asked to revoke seats.
 
-Do not invent a user or an app list. If the prompt omits apps, use the ticket list. If it names a subset that is on the ticket, use the subset.
+When apps are `none` / empty and the operator asks to **close** the ticket (not revoke seats): comment the close-out, transition toward Done, and expect DynamoDB overall `status` = `No Licenses to Reclaim`. Scanner persist and broker/CLI reclaim rollup write that status when there are no scan-`active` seats (including `identity_unresolved` with no confirmed seats). Connector `error` (misconfig / retryable) still rolls up to `partial` / `error` so unknown never looks clear (P2-R13). Do not invent a user or an app list. If the prompt omits apps, use the ticket list. If it names a subset that is on the ticket, use the subset.
 
 ### 2. Propose the plan
 
@@ -95,9 +95,9 @@ aws dynamodb query --region us-west-1 --profile novatech-sandbox \
   --expression-attribute-values '{":k":{"S":"{KEY}"}}'
 ```
 
-Expect `status=reclaimed` when every scan-`active` app succeeded, else `partial`. Confirm `reclaim[]`, `reclaimed_by`, `reclaimed_at`. Do not `UpdateItem`.
+Expect `status=reclaimed` when every scan-`active` app succeeded, `No Licenses to Reclaim` when none were active, else `partial`. Confirm `reclaim[]`, `reclaimed_by`, `reclaimed_at` after a live reclaim. Do not `UpdateItem`.
 
-Optional seat checks (read APIs / scanner connectors only): GitHub member 404; Linear inactive/absent; Jira not in `jira-users-buffett-dev` (Jira Software product-access group). JSM group `jira-servicemanagement-users-buffett-dev` may remain — v1 accepted.
+Optional seat checks (read APIs / scanner connectors only): GitHub member 404; Linear inactive/absent; Jira not in `jira-users-buffett-dev` or `confluence-users-buffett-dev`. JSM group `jira-servicemanagement-users-buffett-dev` may remain — v1 accepted.
 
 ## Failure handling
 

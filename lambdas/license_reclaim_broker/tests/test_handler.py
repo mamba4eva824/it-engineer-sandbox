@@ -115,6 +115,29 @@ def test_already_reclaimed_app_is_idempotent_skip(lambda_url_event, table):
     assert rm.request_history == []
 
 
+def test_force_reruns_already_reclaimed_app(lambda_url_event, table):
+    row = make_row(
+        issue_key="SUP-2",
+        apps=[{"app": "jira", "status": "active"}],
+        reclaim=[{"app": "jira", "status": "reclaimed"}],
+    )
+    table.put_item(Item=row)
+    with requests_mock.Mocker() as rm:
+        rm.get(f"{GATEWAY}/rest/api/3/user/search", json=[{"accountId": "acc-1", "emailAddress": row["login"]}])
+        rm.delete(f"{GATEWAY}/rest/api/3/group/user", status_code=204)
+        event = lambda_url_event(body={
+            "issue_key": "SUP-2",
+            "apps": ["jira"],
+            "dry_run": False,
+            "force": True,
+        })
+        resp = handler.lambda_handler(event, None)
+    body = json.loads(resp["body"])
+    assert body["results"][0]["status"] == "reclaimed"
+    deletes = [h for h in rm.request_history if h.method == "DELETE"]
+    assert len(deletes) == 2
+
+
 def test_live_apply_all_succeed_sets_row_status_reclaimed(lambda_url_event, table):
     row = make_row(issue_key="SUP-2", apps=[{"app": "github", "status": "active"}])
     table.put_item(Item=row)
@@ -137,6 +160,24 @@ def test_live_apply_all_succeed_sets_row_status_reclaimed(lambda_url_event, tabl
     assert stored["status"] == "reclaimed"
     assert stored["reclaimed_by"] == "chris@ohmgym.com"
     assert stored["reclaim"][0]["app"] == "github"
+
+
+def test_update_reclaim_no_active_apps_sets_no_licenses(table):
+    from row_status import NO_LICENSES_TO_RECLAIM
+
+    row = make_row(
+        issue_key="SUP-4",
+        apps=[
+            {"app": "github", "status": "error", "error_class": "identity_unresolved"},
+            {"app": "linear", "status": "not_member"},
+            {"app": "jira", "status": "not_member"},
+        ],
+    )
+    table.put_item(Item=row)
+    status = handler.update_reclaim(row, [], "chris@ohmgym.com")
+    assert status == NO_LICENSES_TO_RECLAIM
+    stored = table.get_item(Key={"run_date": row["run_date"], "user_id": row["user_id"]})["Item"]
+    assert stored["status"] == NO_LICENSES_TO_RECLAIM
 
 
 def test_live_apply_partial_failure_sets_row_status_partial(lambda_url_event, table):
@@ -180,5 +221,9 @@ def test_jira_tries_remove_product_access_then_deactivate_user(lambda_url_event,
     # must never have been called.
     called_urls = [h.url for h in rm.request_history]
     assert not any("manage/lifecycle/disable" in u for u in called_urls)
-    delete = next(h for h in rm.request_history if h.method == "DELETE")
-    assert delete.qs["groupid"] == ["f757c432-6ca9-41a9-b956-e4b9396a1cf9"]
+    deletes = [h for h in rm.request_history if h.method == "DELETE"]
+    group_ids = {h.qs["groupid"][0] for h in deletes}
+    assert group_ids == {
+        "f757c432-6ca9-41a9-b956-e4b9396a1cf9",
+        "1057bb4d-3c22-4e72-898f-d99cbdea8c97",
+    }

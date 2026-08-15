@@ -44,6 +44,7 @@ cp "$REPO/scripts/licenses/http_util.py" "$BUILD/pkg/http_util.py"
 cp "$REPO/scripts/licenses/github_client.py" "$BUILD/pkg/github_client.py"
 cp "$REPO/scripts/licenses/linear_client.py" "$BUILD/pkg/linear_client.py"
 cp "$REPO/scripts/licenses/jira_client.py" "$BUILD/pkg/jira_client.py"
+cp "$REPO/scripts/licenses/row_status.py" "$BUILD/pkg/row_status.py"
 cp "$REPO/config/licenses/apps.json" "$BUILD/pkg/config/licenses/apps.json"
 
 ( cd "$BUILD/pkg" && zip -qr9 "$ZIP" . )
