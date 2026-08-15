@@ -33,3 +33,12 @@ resource "aws_secretsmanager_secret" "write" {
   name        = "ohmgym-licenses/${each.key}"
   description = "License reclaim WRITE credential (${each.key}). Scanner IAM cannot read this. Phase 3."
 }
+
+# Shared secret the broker Function URL checks against the caller's
+# Authorization header (same pattern as lambdas/okta_activation_handler).
+# Not a SaaS credential — put any random string value from .env or
+# `openssl rand -hex 32` after apply.
+resource "aws_secretsmanager_secret" "broker_webhook" {
+  name        = "ohmgym-licenses/broker-webhook-secret"
+  description = "Shared secret for the license reclaim broker Function URL (Authorization header)."
+}

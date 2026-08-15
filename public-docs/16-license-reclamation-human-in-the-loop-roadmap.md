@@ -4,11 +4,12 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Next build is Phase 3 (reclaim broker). Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (14 Aug 2026):** Phase 0, Phase 1, and Phase 2 (scanner Lambda) are live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Phase 3 (reclaim broker) is **code-complete, not yet applied** — connectors, Lambda, Terraform, CLI, tests, and CI are built and pass locally; `terraform apply` and write-secret promotion are pending, operator-gated next steps. Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
 - [License Reclaimer/phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md)
+- [License Reclaimer/phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md)
 
 Companion to:
 
@@ -167,6 +168,7 @@ This mirrors Corporate Engineering / Business Technology expectations: API autom
 | `pk`                | `run_date` (PT)                                                                                |
 | `sk`                | `user_id` (Okta id)                                                                            |
 | `login` / `okta_id` | Identity snapshot                                                                              |
+| `first_name` / `last_name` | From Okta profile (`firstName`/`lastName`), carried on `leaver.completed`; optional, defaults to `""` for older/hand-built events |
 | `apps`              | List of per-app results (shape below)                                                          |
 | `jira_issue_key`    | Set when ticket created or reused                                                              |
 | `status`            | Row-level outcome (shape below)                                                                |
@@ -505,6 +507,8 @@ terraform/aws-license-reclaim/
 
 ### Phase 3 — Reclaim Broker (deterministic writes)
 
+**Status:** Code-complete, not yet applied (14 Aug 2026). Log: [phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md).
+
 **Objective:** Allowlisted revoke API. Dry-run default. No Cursor required yet — `curl` / CLI proves the path.
 
 | ID    | Requirement                                                                                 |
@@ -725,3 +729,4 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | [Phase 0 log](License%20Reclaimer/phase-0-trials-and-credentials.md) | Proven membership APIs + HTTP classification evidence |
 | [Phase 1 log](License%20Reclaimer/phase-1-jsm-foundation.md) | JSM field IDs, request type `4`, project `SUP` |
 | [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda live in `us-west-1`; error contract; seed matrix; apply notes |
+| [Phase 3 log](License%20Reclaimer/phase-3-reclaim-broker.md) | Reclaim broker code-complete; Jira write-path decision; broker API + CLI contract; live-apply checklist (pending) |

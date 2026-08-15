@@ -234,6 +234,8 @@ def _emit_leaver_completed(
     run_id: str,
     run_date: str,
     github_username: str | None,
+    first_name: str = "",
+    last_name: str = "",
 ) -> None:
     """Publish leaver.completed for the license scanner. Raises on failed entries."""
     detail = {
@@ -242,6 +244,8 @@ def _emit_leaver_completed(
         "run_id": run_id,
         "run_date": run_date,
         "github_username": github_username or None,
+        "first_name": first_name or "",
+        "last_name": last_name or "",
     }
     resp = _events.put_events(
         Entries=[{
@@ -466,6 +470,8 @@ def lambda_handler(event, context):  # noqa: ARG001
                     run_id=batch_run_id,
                     run_date=run_date,
                     github_username=github_username,
+                    first_name=profile.get("firstName", ""),
+                    last_name=profile.get("lastName", ""),
                 )
             except Exception as e:
                 print(json.dumps({

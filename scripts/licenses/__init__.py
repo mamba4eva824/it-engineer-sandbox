@@ -1,1 +1,4 @@
-"""License-scan connectors (GitHub, Linear, Jira). Copied into the scanner Lambda zip."""
+"""License-scan and reclaim connectors (GitHub, Linear, Jira).
+
+Copied into the scanner and reclaim-broker Lambda zips.
+"""

@@ -21,7 +21,9 @@
     "auto_reclaim": false,
     "read_secret": "ohmgym-licenses/jira-read",
     "write_secret": "ohmgym-licenses/jira-write",
-    "actions": ["remove_product_access", "deactivate_user"]
+    "actions": ["remove_product_access", "deactivate_user"],
+    "product_group": "jira-servicedesk-users",
+    "product_group_note": "Placeholder - confirm the real product-access group name on buffett-dev via GET /rest/api/3/groups/picker before a live apply. remove_product_access is tried first (works with a manage:jira-configuration-scoped API token); deactivate_user is a best-effort second attempt that requires org-admin API access, which personal/non-domain-claimed Atlassian sites like this one likely do not have."
   },
   "figma": {
     "label": "Figma",

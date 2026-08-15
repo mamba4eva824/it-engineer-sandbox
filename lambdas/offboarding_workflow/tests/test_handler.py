@@ -85,6 +85,7 @@ def test_deactivate_flow(reset_token_cache, empty_audit_table, okta_user_factory
 def test_deactivate_emits_leaver_completed(reset_token_cache, empty_audit_table, okta_user_factory):
     user = okta_user_factory(
         user_id="00uA", login="a@ohmgym.com", end_date=TODAY, github_username="octocat",
+        first_name="Alice", last_name="Anderson",
     )
     captured: list[dict] = []
 
@@ -111,6 +112,8 @@ def test_deactivate_emits_leaver_completed(reset_token_cache, empty_audit_table,
     assert detail["run_date"] == TODAY
     assert detail["github_username"] == "octocat"
     assert detail["run_id"]
+    assert detail["first_name"] == "Alice"
+    assert detail["last_name"] == "Anderson"
 
 
 @freeze_time(f"{TODAY}T16:00:00+00:00")

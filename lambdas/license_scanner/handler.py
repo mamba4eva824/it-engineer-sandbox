@@ -128,6 +128,10 @@ def _validate_payload(detail: dict[str, Any]) -> dict[str, str]:
         "run_id": str(detail["run_id"]).strip(),
         "run_date": str(detail["run_date"]).strip(),
         "github_username": github_username,
+        # Optional: absent on payloads from before this field existed (or
+        # hand-built dry-run/CLI events) — never required.
+        "first_name": str(detail.get("first_name") or "").strip(),
+        "last_name": str(detail.get("last_name") or "").strip(),
     }
 
 
@@ -527,6 +531,8 @@ def _base_item(payload: dict[str, str], findings: list[dict[str, Any]]) -> dict[
         "user_id": payload["okta_id"],
         "login": payload["user_email"],
         "okta_id": payload["okta_id"],
+        "first_name": payload.get("first_name") or "",
+        "last_name": payload.get("last_name") or "",
         "apps": findings,
         "jira_issue_key": "",
         "status": "",

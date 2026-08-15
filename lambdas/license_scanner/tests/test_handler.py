@@ -31,6 +31,8 @@ def _event(**overrides) -> dict:
         "run_id": RUN_ID,
         "run_date": RUN_DATE,
         "github_username": "octocat",
+        "first_name": "Marcus",
+        "last_name": "Reyes",
     }
     payload.update(overrides)
     return payload
@@ -166,6 +168,35 @@ def test_clean_user_no_ticket(empty_table):
     assert item["status"] == "clean"
     figma = next(a for a in result["apps"] if a["app"] == "figma")
     assert figma["status"] == "skipped"
+
+
+def test_ddb_item_persists_first_and_last_name(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 404)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_slack(rm)
+        handler.lambda_handler(_event(), None)
+    item = empty_table.get_item(Key={"run_date": RUN_DATE, "user_id": OKTA_ID})["Item"]
+    assert item["first_name"] == "Marcus"
+    assert item["last_name"] == "Reyes"
+
+
+def test_missing_first_last_name_defaults_to_empty_string_not_required(empty_table):
+    """first_name/last_name are optional — older/hand-built events without
+    them must not fail validation, and should persist as empty strings."""
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 404)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_slack(rm)
+        event = _event()
+        del event["first_name"]
+        del event["last_name"]
+        handler.lambda_handler(event, None)
+    item = empty_table.get_item(Key={"run_date": RUN_DATE, "user_id": OKTA_ID})["Item"]
+    assert item["first_name"] == ""
+    assert item["last_name"] == ""
 
 
 def test_github_active_opens_ticket_without_figma(empty_table):

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'lambdas/license_scanner/**'
+      - 'lambdas/license_reclaim_broker/**'
       - 'lambdas/offboarding_workflow/**'
       - 'terraform/aws-license-reclaim/**'
       - 'terraform/aws-offboarding/**'
@@ -13,12 +14,14 @@ on:
       - 'config/licenses/**'
       - 'config/jira/field-mapping.json'
       - 'tests/unit/test_license_scanner_infra_contract.py'
+      - 'tests/unit/test_license_reclaim_broker_infra_contract.py'
       - '.github/workflows/license-scanner-ci.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'lambdas/license_scanner/**'
+      - 'lambdas/license_reclaim_broker/**'
       - 'lambdas/offboarding_workflow/**'
       - 'terraform/aws-license-reclaim/**'
       - 'terraform/aws-offboarding/**'
@@ -26,6 +29,7 @@ on:
       - 'config/licenses/**'
       - 'config/jira/field-mapping.json'
       - 'tests/unit/test_license_scanner_infra_contract.py'
+      - 'tests/unit/test_license_reclaim_broker_infra_contract.py'
       - '.github/workflows/license-scanner-ci.yml'
 
 concurrency:
@@ -34,7 +38,7 @@ concurrency:
 
 jobs:
   python-tests:
-    name: pytest (scanner + offboarding emit)
+    name: pytest (scanner + broker + offboarding emit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,20 +48,26 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             lambdas/license_scanner/requirements-dev.txt
+            lambdas/license_reclaim_broker/requirements-dev.txt
             lambdas/offboarding_workflow/requirements-dev.txt
       - run: |
           python -m pip install --upgrade pip
           pip install -r lambdas/license_scanner/requirements-dev.txt
+          pip install -r lambdas/license_reclaim_broker/requirements-dev.txt
           pip install -r lambdas/offboarding_workflow/requirements-dev.txt
       - name: pytest license scanner
         run: pytest lambdas/license_scanner/tests -v
+      - name: pytest license reclaim broker
+        run: pytest lambdas/license_reclaim_broker/tests -v
       - name: pytest scanner infra error-handling contract
         run: pytest tests/unit/test_license_scanner_infra_contract.py -v
+      - name: pytest broker infra contract
+        run: pytest tests/unit/test_license_reclaim_broker_infra_contract.py -v
       - name: pytest offboarding (leaver.completed emit)
         run: pytest lambdas/offboarding_workflow/tests -v
 
   build-zip:
-    name: build Lambda zip
+    name: build Lambda zips
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +76,8 @@ jobs:
           python-version: '3.12'
       - run: bash lambdas/license_scanner/build.sh
       - run: test -f lambdas/license_scanner/build/handler.zip
+      - run: bash lambdas/license_reclaim_broker/build.sh
+      - run: test -f lambdas/license_reclaim_broker/build/handler.zip
 
   terraform-validate:
     name: terraform fmt + validate (${{ matrix.stack }})
@@ -84,9 +96,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Build license scanner zip
+      - name: Build license scanner + broker zips
         if: matrix.stack == 'terraform/aws-license-reclaim'
-        run: bash lambdas/license_scanner/build.sh
+        run: |
+          bash lambdas/license_scanner/build.sh
+          bash lambdas/license_reclaim_broker/build.sh
       - name: Build offboarding zip
         if: matrix.stack == 'terraform/aws-offboarding'
         run: bash lambdas/offboarding_workflow/build.sh
@@ -106,9 +120,11 @@ jobs:
           python-version: '3.12'
       - run: |
           python -m py_compile lambdas/license_scanner/handler.py
+          python -m py_compile lambdas/license_reclaim_broker/handler.py
           python -m py_compile scripts/licenses/http_util.py
           python -m py_compile scripts/licenses/github_client.py
           python -m py_compile scripts/licenses/linear_client.py
           python -m py_compile scripts/licenses/jira_client.py
           python -m py_compile scripts/licenses/scan_cli.py
+          python -m py_compile scripts/licenses/reclaim.py
           python -m py_compile lambdas/offboarding_workflow/handler.py

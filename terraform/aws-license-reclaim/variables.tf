@@ -114,3 +114,17 @@ variable "alarm_email" {
   description = "Email endpoint for the CloudWatch error alarm."
   type        = string
 }
+
+# --- Phase 3: Reclaim Broker ---
+
+variable "broker_name_prefix" {
+  description = "Prefix applied to every broker resource name (lambda, log group, IAM, alarm)."
+  type        = string
+  default     = "ohmgym-license-reclaim-broker"
+}
+
+variable "broker_lambda_timeout_seconds" {
+  description = "Broker Lambda timeout in seconds. Covers up to 3 apps x retries x 15s + one Jira comment call."
+  type        = number
+  default     = 90
+}

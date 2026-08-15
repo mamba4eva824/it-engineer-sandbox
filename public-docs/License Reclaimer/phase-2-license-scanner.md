@@ -143,3 +143,9 @@ python scripts/licenses/scan_cli.py --email chris+access-review-01@ohmgym.com \
 - Phase 3 reclaim broker / write tokens in Cursor
 - Dashboard / workflows card (P2-R10)
 - Figma connector
+
+---
+
+## Data model addendum (14 Aug 2026, during Phase 3 build)
+
+Added `first_name` / `last_name` to `leaver.completed` (from Okta `profile.firstName`/`lastName`, already used elsewhere in the offboarding audit table and Slack summary) and to the `ohmgym-license-reclaim-logs` item persisted by this Lambda. Both fields are optional on the event — `_validate_payload` defaults them to `""` rather than requiring them, so older or hand-built (CLI/dry-run) `leaver.completed` payloads without the fields still validate. No Terraform change needed (DynamoDB only declares attributes used as keys/index hash keys; this is a plain, non-indexed item attribute).
