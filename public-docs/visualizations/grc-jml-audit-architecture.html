@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GRC Analyst Access to JML Audit Tables — Okta + AWS + Claude Desktop</title>
+<title>JML Audit &amp; License Reclamation — Okta + AWS + Claude</title>
 <style>
   :root{
     --bg:#faf5ec; --panel:#fffdf8; --panel2:#f6efe1; --line:#e7dcc6;
@@ -97,13 +97,14 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>GRC Analyst Access to JML Audit Tables</h1>
-    <div class="sub">NovaTech / <b>ohmgym</b> sandbox &nbsp;·&nbsp; <b>Okta</b> governs identity &nbsp;·&nbsp; <b>AWS IAM</b> enforces least privilege &nbsp;·&nbsp; <b>Claude Desktop</b> is the query surface</div>
+    <h1>JML Audit &amp; License Reclamation</h1>
+    <div class="sub">NovaTech / <b>ohmgym</b> sandbox &nbsp;·&nbsp; <b>Okta</b> governs identity &nbsp;·&nbsp; <b>AWS</b> enforces least privilege &nbsp;·&nbsp; <b>Claude</b> reads, proposes, and asks — it never holds the revoke keys</div>
   </header>
 
   <div class="tabs">
-    <button class="tab active" data-tab="t1">① Full Story — Current Implementation</button>
-    <button class="tab" data-tab="t2">② Access Paths — Ideal vs Current</button>
+    <button class="tab active" data-tab="t1">① Audit Access — Full Story</button>
+    <button class="tab" data-tab="t2">② Audit Access — Ideal vs Current</button>
+    <button class="tab" data-tab="t3">③ License Reclamation — Human-in-the-Loop</button>
   </div>
 
   <section class="panel" id="panel-t1">
@@ -148,8 +149,29 @@
     <svg id="svg-t2" viewBox="0 0 1400 810" xmlns="http://www.w3.org/2000/svg"></svg>
   </section>
 
+  <section class="panel hidden" id="panel-t3">
+    <div class="bar">
+      <div class="bar-left">
+        <div class="actrow"><span class="act" id="t3-act"></span><span class="counter" id="t3-counter"></span></div>
+        <h2 id="t3-title"></h2>
+        <p id="t3-caption"></p>
+        <code class="chip hidden" id="t3-chip"></code>
+      </div>
+      <div class="bar-right">
+        <div class="controls">
+          <button id="t3-reset" title="Reset">⟲ Reset</button>
+          <button id="t3-prev" title="Previous step">◀ Prev</button>
+          <button id="t3-play" title="Auto-play">▶ Play</button>
+          <button id="t3-next" title="Next step">Next ▶</button>
+        </div>
+        <div class="dots" id="t3-dots"></div>
+      </div>
+    </div>
+    <svg id="svg-t3" viewBox="0 0 1400 810" xmlns="http://www.w3.org/2000/svg"></svg>
+  </section>
+
   <div class="hint">Keyboard: <kbd>←</kbd> / <kbd>→</kbd> step &nbsp;·&nbsp; <kbd>space</kbd> play / pause</div>
-  <footer>terraform/aws-grc-audit/<span class="sep">·</span>config/okta/desired-state.json<span class="sep">·</span>scripts/grc/query_jml_audit.py<span class="sep">·</span>public-docs/12-grc-jml-audit-access.md</footer>
+  <footer>terraform/aws-grc-audit/<span class="sep">·</span>terraform/aws-license-reclaim/<span class="sep">·</span>config/okta/desired-state.json<span class="sep">·</span>config/licenses/apps.json<span class="sep">·</span>public-docs/12-grc-jml-audit-access.md<span class="sep">·</span>public-docs/16-license-reclamation-human-in-the-loop-roadmap.md</footer>
 </div>
 
 <script>
@@ -158,7 +180,8 @@ const NS = "http://www.w3.org/2000/svg";
 const C = {
   okta:"#2563eb", eb:"#c2156f", lambda:"#e08700", ddb:"#7c3aed", iam:"#d23b56",
   claude:"#c4633f", person:"#0d9488", neutral:"#857a66", green:"#15803d",
-  amber:"#b45309", red:"#dc2626", cyan:"#0e7490"
+  amber:"#b45309", red:"#dc2626", cyan:"#0e7490",
+  gh:"#57606a", lin:"#5e6ad2", jirab:"#0052cc", slack:"#611f69"
 };
 
 function el(name, attrs, parent){
@@ -353,7 +376,7 @@ function animatePacket(scene, spec, tok){
       if (!denied){
         denied = true;
         const pt = place(blockAt);
-        showDeny(scene, pt.x, pt.y);
+        showDeny(scene, pt.x, pt.y, spec.denyLabel);
         g.querySelector(".packet-halo").setAttribute("fill", C.red);
         core.setAttribute("fill", C.red);
       }
@@ -366,14 +389,14 @@ function animatePacket(scene, spec, tok){
   });
 }
 
-function showDeny(scene, x, y){
+function showDeny(scene, x, y, label){
   const g = el("g", {class:"deny", transform:`translate(${x},${y})`,
     style:"transform-origin:"+x+"px "+y+"px"}, scene.overlay);
   el("circle", {r:14, fill:"none", stroke:C.red, "stroke-width":2.5}, g);
   el("line", {x1:-6, y1:-6, x2:6, y2:6, stroke:C.red, "stroke-width":2.5, "stroke-linecap":"round"}, g);
   el("line", {x1:6, y1:-6, x2:-6, y2:6, stroke:C.red, "stroke-width":2.5, "stroke-linecap":"round"}, g);
   txt(el("text", {x:0, y:-22, "text-anchor":"middle", fill:C.red,
-    style:"font-size:10px;font-weight:800;letter-spacing:.5px"}, g), "AccessDeniedException");
+    style:"font-size:10px;font-weight:800;letter-spacing:.5px"}, g), label || "AccessDeniedException");
   setTimeout(() => g.remove(), 950);
 }
 
@@ -618,9 +641,168 @@ const T2 = {
 };
 
 /* ================================================================
+   TAB 3 — LICENSE RECLAMATION (human-in-the-loop, Phases 0–4 live)
+   ================================================================ */
+const T3 = {
+  key:"t3",
+  lanes:[
+    {x:20,  y:22,  w:1360, h:108, label:"OKTA — INTEGRATOR-2367542.OKTA.COM", badge:"IDENTITY", badgeColor:C.okta},
+    {x:20,  y:146, w:1360, h:330, label:"AWS — OHMGYM ACCOUNT 882248517627 · US-WEST-1", badge:"SCAN + RECLAIM AUTOMATION", badgeColor:C.iam},
+    {x:20,  y:492, w:1360, h:128, label:"NON-SCIM SAAS — WHERE PAID SEATS ORPHAN", badge:"SEAT SPEND", badgeColor:C.amber},
+    {x:20,  y:636, w:640,  h:160, label:"WORK QUEUE + VISIBILITY", badge:"JSM + SLACK", badgeColor:C.cyan},
+    {x:680, y:636, w:700,  h:160, label:"SERVICE DESK — HUMAN-IN-THE-LOOP", badge:"APPROVAL", badgeColor:C.person}
+  ],
+  nodes:[
+    {id:"okta3",    x:60,   y:54,  w:330, h:62,  color:C.okta,   title:"Okta — Erin Patel, last day",
+      lines:["session revoked · account deactivated"]},
+    {id:"offboard", x:60,   y:186, w:240, h:80,  color:C.lambda, title:"Offboarding Lambda",
+      lines:["EventBridge · daily 5:00 PM PT","deactivates today's leavers"], badge:"UPSTREAM"},
+    {id:"event",    x:360,  y:190, w:220, h:64,  color:C.eb,     title:"leaver.completed",
+      lines:["\"a leaver just finished\"","email · okta id · github login"]},
+    {id:"dlq",      x:360,  y:280, w:220, h:52,  color:C.neutral, ghost:true, title:"Retry holding queue",
+      lines:["2 retries → SQS DLQ"]},
+    {id:"scanner",  x:640,  y:186, w:250, h:84,  color:C.lambda, title:"License Scanner",
+      lines:["finds orphaned paid seats","ohmgym-license-scanner"], badge:"READ-ONLY"},
+    {id:"readsec",  x:640,  y:360, w:250, h:56,  color:C.iam,    title:"Read-only secrets",
+      lines:["scanner can look, never touch"]},
+    {id:"ddb3",     x:950,  y:186, w:300, h:84,  color:C.ddb,    title:"Reclaim audit table",
+      lines:["ohmgym-license-reclaim-logs","status: ticketed → reclaimed"], badge:"TTL 90d"},
+    {id:"broker",   x:950,  y:336, w:200, h:96,  color:C.iam,    title:"Reclaim Broker",
+      lines:["the only door that revokes","validates ticket + findings"], badge:"ONLY WRITE PATH"},
+    {id:"writesec", x:1180, y:356, w:190, h:56,  color:C.iam,    title:"Write secrets",
+      lines:["scanner can't read these"]},
+    {id:"github",   x:240,  y:528, w:230, h:70,  color:C.gh,     title:"GitHub",
+      lines:["org ohmgym-sandbox","Erin: paid org seat"], badge:"SEAT"},
+    {id:"linear",   x:520,  y:528, w:230, h:70,  color:C.lin,    title:"Linear",
+      lines:["workspace it-systems-sandbox","Erin: not a member"]},
+    {id:"jira",     x:800,  y:528, w:230, h:70,  color:C.jirab,  title:"Jira",
+      lines:["buffett-dev.atlassian.net","Erin: product access"], badge:"SEAT"},
+    {id:"figma",    x:1080, y:528, w:230, h:70,  color:C.neutral, ghost:true, title:"Figma — parked",
+      lines:["no members API on this plan","enabled: false in catalog"]},
+    {id:"slack3",   x:45,   y:672, w:230, h:100, color:C.slack,  title:"Slack #leaver-it-ops",
+      lines:["same-day visibility","not the work queue"]},
+    {id:"jsm",      x:320,  y:672, w:310, h:100, color:C.cyan,   title:"JSM ticket SUP-3",
+      lines:["License Reclamation request","leaver · apps: github, jira · run id"], badge:"WORK QUEUE"},
+    {id:"copilot",  x:740,  y:672, w:300, h:100, color:C.claude, title:"Cursor / Claude copilot",
+      lines:["reads the ticket via Atlassian MCP","holds zero revoke credentials"], badge:"AI SKILL"},
+    {id:"agent",    x:1090, y:672, w:250, h:100, color:C.person, title:"IT-Ops agent",
+      lines:["owns the reclaim queue","says yes before any revoke"], badge:"HUMAN"}
+  ],
+  edges:[
+    {id:"r_off_okta", from:"offboard", fa:{side:"top",f:0.5},    to:"okta3",   ta:{side:"bottom",f:0.5}, color:C.okta},
+    {id:"r_off_evt",  from:"offboard", fa:{side:"right"},        to:"event",   ta:{side:"left"},         color:C.eb},
+    {id:"r_evt_scan", from:"event",    fa:{side:"right"},        to:"scanner", ta:{side:"left"},         color:C.eb},
+    {id:"r_evt_dlq",  from:"event",    fa:{side:"bottom",f:0.5}, to:"dlq",     ta:{side:"top",f:0.5},    color:C.neutral, dashed:true},
+    {id:"r_scan_read",from:"scanner",  fa:{side:"bottom",f:0.5}, to:"readsec", ta:{side:"top",f:0.5},    color:C.iam},
+    {id:"r_scan_gh",  from:"scanner",  fa:{side:"bottom",f:0.15},to:"github",  ta:{side:"top",f:0.35},   color:C.gh},
+    {id:"r_scan_li",  from:"scanner",  to:"linear", color:C.lin,
+      d:"M 710 270 C 710 320, 620 340, 620 430 C 620 490, 630 500, 635 528"},
+    {id:"r_scan_ji",  from:"scanner",  to:"jira",   color:C.jirab,
+      d:"M 860 270 C 860 310, 905 330, 905 420 C 905 480, 912 500, 915 528"},
+    {id:"r_scan_ddb", from:"scanner",  fa:{side:"right"},        to:"ddb3",    ta:{side:"left"},         color:C.ddb},
+    {id:"r_scan_jsm", from:"scanner",  to:"jsm",    color:C.cyan,
+      d:"M 700 270 C 700 370, 495 390, 495 520 C 495 610, 495 630, 475 672"},
+    {id:"r_scan_slk", from:"scanner",  to:"slack3", color:C.slack,
+      d:"M 660 270 C 660 380, 120 380, 120 520 C 120 610, 160 620, 160 672"},
+    {id:"r_jsm_agent",from:"jsm",      to:"agent",  color:C.person,
+      d:"M 537 772 C 537 802, 1215 802, 1215 772"},
+    {id:"r_agent_cop",from:"agent",    fa:{side:"left"},         to:"copilot", ta:{side:"right"},        color:C.person},
+    {id:"r_cop_jsm",  from:"copilot",  fa:{side:"left"},         to:"jsm",     ta:{side:"right"},        color:C.claude},
+    {id:"r_cop_brk",  from:"copilot",  to:"broker", color:C.claude,
+      d:"M 890 672 C 890 636, 1055 626, 1055 556 C 1055 496, 1052 466, 1050 432"},
+    {id:"r_cop_saas", from:"copilot",  to:"jira",   color:C.red, dashed:true,
+      d:"M 800 672 C 800 644, 938 636, 938 598"},
+    {id:"r_brk_write",from:"broker",   fa:{side:"right",f:0.5},  to:"writesec",ta:{side:"left"},         color:C.iam},
+    {id:"r_brk_gh",   from:"broker",   fa:{side:"bottom",f:0.1}, to:"github",  ta:{side:"top",f:0.7},    color:C.gh},
+    {id:"r_brk_ji",   from:"broker",   fa:{side:"bottom",f:0.35},to:"jira",    ta:{side:"top",f:0.7},    color:C.jirab},
+    {id:"r_brk_ddb",  from:"broker",   fa:{side:"top",f:0.5},    to:"ddb3",    ta:{side:"bottom",f:0.5}, color:C.ddb}
+  ],
+  steps:[
+    {act:"OVERVIEW · THE PROBLEM", actColor:C.amber,
+     title:"When someone leaves, some paid seats never leave with them",
+     caption:"Okta + SCIM shut off Slack and Google the moment a leaver is deactivated — but GitHub, Linear, and Jira aren't SCIM-connected, so their paid seats keep billing until someone remembers to click. This workflow closes that gap in three moves: automatic discovery, a service-desk ticket, and a human-approved reclaim. Nothing is ever revoked without a person saying yes."},
+    {act:"ACT 1 · FIND THE WASTE", actColor:C.eb,
+     title:"5:00 PM — Erin Patel's last day, offboarding runs on rails",
+     caption:"The existing offboarding automation deactivates Erin in Okta — sessions revoked, account off. Then it announces the fact as an event: \"a leaver just finished.\" That single event is what powers everything downstream; no human has to remember to start a license check.",
+     chip:"leaver.completed { email: chris+access-review-01@ohmgym.com · githubUsername: erin-patel · run_id: 2026-08-14 }",
+     focus:["offboard","okta3","event"],
+     packets:[{edge:"r_off_okta"},{edge:"r_off_okta", rev:true, color:C.green},{edge:"r_off_evt"}]},
+    {act:"ACT 1 · FIND THE WASTE", actColor:C.eb,
+     title:"The License Scanner wakes up — read-only by design",
+     caption:"The event triggers the scanner within seconds. If delivery ever fails it retries twice and lands in a holding queue, so a leaver is never silently skipped. The scanner signs in to each app with read-only credentials: it can look at membership lists, but it is physically unable to change anything.",
+     focus:["event","scanner","dlq","readsec"], edges:["r_evt_dlq"],
+     packets:[{edge:"r_evt_scan"},{edge:"r_scan_read"},{edge:"r_scan_read", rev:true, color:C.green}]},
+    {act:"ACT 1 · FIND THE WASTE", actColor:C.eb,
+     title:"Three apps checked independently — unknown never looks like clean",
+     caption:"GitHub confirms Erin still holds a paid org seat. Linear says she was never a member. Jira still shows her product access. Each app is checked on its own, so one vendor having a bad day doesn't hide findings in the others — and a failed check is reported as \"unknown\", never mistaken for \"no seat\".",
+     chip:"GET /orgs/ohmgym-sandbox/members/erin-patel → 204 (seat) · Linear: not a member · Jira: access found",
+     focus:["scanner","github","linear","jira"],
+     packets:[{edge:"r_scan_gh"},{edge:"r_scan_gh", rev:true, color:C.green},{edge:"r_scan_li"},{edge:"r_scan_li", rev:true, color:C.green},{edge:"r_scan_ji"},{edge:"r_scan_ji", rev:true, color:C.green}]},
+    {act:"ACT 1 · FIND THE WASTE", actColor:C.ddb,
+     title:"Every result is written down before anything else happens",
+     caption:"The findings land in an audit table — which apps still had seats, which were clean, which couldn't be checked. Rows purge themselves after 90 days, so retention is enforced by the table, not by policy documents. GRC can later answer \"what did we find and what did we do about it\" without asking IT-Ops for screenshots.",
+     focus:["scanner","ddb3"],
+     packets:[{edge:"r_scan_ddb"},{edge:"r_scan_ddb"}]},
+    {act:"ACT 1 · FIND THE WASTE", actColor:C.cyan,
+     title:"Seats remain → a ticket opens in the service desk",
+     caption:"Because Erin still holds GitHub and Jira seats, a License Reclamation ticket opens automatically in JSM with everything an agent needs: who left, which apps need action, and the run it came from. The IT-Ops Slack channel gets a same-day summary. A clean scan creates no ticket — no busywork — and email paging is reserved for genuine system failures.",
+     chip:"SUP-3 · Leaver: chris+access-review-01@ohmgym.com · Apps requiring action: github, jira",
+     focus:["scanner","jsm","slack3"],
+     packets:[{edge:"r_scan_jsm"},{edge:"r_scan_slk"}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.person,
+     title:"An IT-Ops agent picks up the ticket and asks the copilot",
+     caption:"A person now enters the loop. The agent opens SUP-3 from the queue and asks the AI copilot in plain English to handle it. The copilot is a scripted skill with guardrails — not a free agent with admin keys.",
+     chip:"\"Pull SUP-3. Reclaim GitHub and Jira for the leaver via the license broker — dry-run first.\"",
+     focus:["jsm","agent","copilot"],
+     packets:[{edge:"r_jsm_agent"},{edge:"r_agent_cop"}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.claude,
+     title:"The copilot reads the ticket itself — it never takes the prompt's word",
+     caption:"Through the Atlassian integration the copilot loads SUP-3 and works only from what the ticket says: the leaver, the apps, the run ID. If the prompt names a different person, or the ticket carries a legal-hold note, the copilot refuses. The ticket — not the chat — is the source of truth.",
+     focus:["copilot","jsm"],
+     packets:[{edge:"r_cop_jsm"},{edge:"r_cop_jsm", rev:true, color:C.green}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.claude,
+     title:"Dry run first — the human sees the exact plan before anything happens",
+     caption:"The copilot asks the Reclaim Broker for a dry run. The broker answers with precisely what would happen — remove Erin's GitHub org seat, remove her Jira product access — and the copilot stops and asks the agent to confirm. The destructive step always has a person in front of it.",
+     chip:"POST /v1/licenses/reclaim { \"issue_key\": \"SUP-3\", \"apps\": [\"github\",\"jira\"], \"dry_run\": true }",
+     focus:["agent","copilot","broker"],
+     packets:[{edge:"r_cop_brk"},{edge:"r_cop_brk", rev:true, color:C.green},{edge:"r_agent_cop", color:C.green}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.iam,
+     title:"On \"yes\" — the broker re-checks everything itself, then unlocks its own keys",
+     caption:"The broker doesn't trust its caller either. It re-validates: is each app on the approved catalog? Do the scan findings really show an active seat? Was this already reclaimed? Only then does it fetch its write credentials — credentials that exist nowhere else in this architecture: not in the copilot, not in the scanner.",
+     chip:"dry_run: false · requested_by: chris@ohmgym.com",
+     focus:["copilot","broker","writesec"],
+     packets:[{edge:"r_cop_brk"},{edge:"r_brk_write"},{edge:"r_brk_write", rev:true, color:C.green}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.green,
+     title:"Two paid seats stop billing today — not at the next manual audit",
+     caption:"The broker removes Erin's GitHub org membership and her Jira product access, each app independently so one failure never blocks the other. This is the exact run that happened live on 15 Aug: both seats confirmed gone afterwards.",
+     chip:"DELETE /orgs/ohmgym-sandbox/memberships/erin-patel → 204 · Jira group removal → 200",
+     focus:["broker","github","jira"],
+     packets:[{edge:"r_brk_gh"},{edge:"r_brk_gh", rev:true, color:C.green},{edge:"r_brk_ji"},{edge:"r_brk_ji", rev:true, color:C.green}]},
+    {act:"ACT 2 · HUMAN-APPROVED CLEANUP", actColor:C.green,
+     title:"Close-out is automatic — a three-way audit trail",
+     caption:"The audit table flips to \"reclaimed\", the ticket gets a per-app results comment, and the copilot moves SUP-3 to Done. Ticket, database, and logs all share one correlation ID — so six months from now, one lookup shows who asked, who approved, what was removed, and when.",
+     chip:"correlation_id JIRA-SUP-3 · row status: reclaimed · SUP-3 → Done",
+     focus:["broker","ddb3","copilot","jsm"],
+     packets:[{edge:"r_brk_ddb", color:C.green},{edge:"r_cop_jsm", color:C.green}]},
+    {act:"GUARDRAILS", actColor:C.red,
+     title:"What if the AI tried to go around the broker? It can't.",
+     caption:"There are no GitHub, Linear, or Jira admin tokens anywhere in the copilot's environment — only the broker's address and a shared secret. A direct call to a SaaS admin API isn't denied by policy; it's impossible by construction. And every broker request logs who asked.",
+     chip:"copilot env: BROKER_FUNCTION_URL + webhook secret — no SaaS write tokens, ever",
+     focus:["copilot","jira","broker"],
+     packets:[{edge:"r_cop_saas", blocked:true, color:C.red, denyLabel:"no write tokens exist here"}]},
+    {act:"GUARDRAILS", actColor:C.red,
+     title:"And the broker refuses bad requests — even from a confirmed human",
+     caption:"An app that isn't on the approved catalog is rejected before any call leaves the building. A seat whose scan came back uncertain is never revoked on a guess — like Marcus Lee, whose GitHub identity couldn't be resolved: his ticket waits for a human, no auto-revoke. Careful by default, auditable always.",
+     chip:"{ \"apps\": [\"salesforce\"] } → HTTP 400 — rejected before any SaaS call",
+     focus:["copilot","broker"],
+     packets:[{edge:"r_cop_brk", blocked:true, color:C.red, denyLabel:"HTTP 400 — not on allowlist"}]}
+  ]
+};
+
+/* ================================================================
    boot + tab switching + keyboard
    ================================================================ */
-const scenes = { t1: buildScene(T1), t2: buildScene(T2) };
+const scenes = { t1: buildScene(T1), t2: buildScene(T2), t3: buildScene(T3) };
 let activeTab = "t1";
 
 document.querySelectorAll(".tab").forEach(btn => {
@@ -640,10 +822,11 @@ document.querySelectorAll(".tab").forEach(btn => {
   });
 });
 
-// deep-linking: ?tab=t2&step=7 (or #t2) jumps straight to a view
+// deep-linking: ?tab=t2&step=7 (or #t3) jumps straight to a view
 const qp = new URLSearchParams(location.search);
-if (qp.get("tab") === "t2" || location.hash === "#t2")
-  document.querySelector('.tab[data-tab="t2"]').click();
+const wantTab = qp.get("tab") || location.hash.slice(1);
+if (scenes[wantTab] && wantTab !== activeTab)
+  document.querySelector(`.tab[data-tab="${wantTab}"]`).click();
 const qstep = parseInt(qp.get("step"), 10);
 if (!isNaN(qstep)) setStep(scenes[activeTab], qstep - 1);
 
