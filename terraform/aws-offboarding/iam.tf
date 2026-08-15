@@ -1,7 +1,7 @@
 # IAM for the ohmgym-offboarding-workflow Lambda and EventBridge Scheduler.
 #
 # Two principals, two roles:
-#   - Lambda execution role: scoped to logs, secrets, dynamodb only.
+#   - Lambda execution role: scoped to logs, secrets, dynamodb, events.
 #   - Scheduler role: scoped to lambda:InvokeFunction on this Lambda only.
 #
 # No AWS-managed policy attachments. All policies are inline + resource-scoped.
@@ -86,6 +86,25 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
   name   = "${var.name_prefix}-dynamodb"
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.lambda_dynamodb.json
+}
+
+# EventBridge PutEvents — leaver.completed on the default bus for the license scanner.
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "lambda_events" {
+  statement {
+    effect  = "Allow"
+    actions = ["events:PutEvents"]
+    resources = [
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:event-bus/default",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_events" {
+  name   = "${var.name_prefix}-events"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.lambda_events.json
 }
 
 # -----------------------------------------------------------------------------

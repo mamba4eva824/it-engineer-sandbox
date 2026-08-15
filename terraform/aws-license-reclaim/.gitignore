@@ -1,0 +1,8 @@
+# Local Terraform state + lock files.
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Real values (secret ARNs + alarm email). Committed template is .tfvars.example.
+terraform.tfvars

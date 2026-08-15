@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored).
+#
+# slack_bot_token_secret_arn from: terraform -chdir=../aws-secrets output
+# (same ARN used by terraform/aws-offboarding).
+
+slack_bot_token_secret_arn = "arn:aws:secretsmanager:us-west-1:ACCOUNT:secret:ohmgym-jml/slack-bot-token-XXXXXX"
+
+jira_email  = "buffett.dev117@gmail.com"
+alarm_email = "ops@example.com"

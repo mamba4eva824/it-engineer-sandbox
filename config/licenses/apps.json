@@ -1,0 +1,38 @@
+{
+  "github": {
+    "label": "GitHub",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/github-read",
+    "write_secret": "ohmgym-licenses/github-write",
+    "actions": ["remove_org_member"]
+  },
+  "linear": {
+    "label": "Linear",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/linear-read",
+    "write_secret": "ohmgym-licenses/linear-write",
+    "actions": ["suspend_user"]
+  },
+  "jira": {
+    "label": "Jira / Atlassian",
+    "enabled": true,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/jira-read",
+    "write_secret": "ohmgym-licenses/jira-write",
+    "actions": ["remove_product_access", "deactivate_user"],
+    "product_group": "jira-users-buffett-dev",
+    "product_group_id": "f757c432-6ca9-41a9-b956-e4b9396a1cf9",
+    "product_group_note": "Jira Software product-access group on buffett-dev (site default jira-users-{site}). This is the group seed leavers were invited into (Erin/Ned/Tyrion confirmed via GET /rest/api/3/user/groups). groupId from that same call. remove_product_access prefers groupId over the deprecated groupname query param. A leaver may also hold jira-servicemanagement-users-buffett-dev (JSM product access, a separate product); v1 only removes the one configured group. remove_product_access is tried first (manage:jira-configuration-scoped API token); deactivate_user is a best-effort second attempt that requires org-admin API access, which personal/non-domain-claimed Atlassian sites like this one likely do not have."
+  },
+  "figma": {
+    "label": "Figma",
+    "enabled": false,
+    "auto_reclaim": false,
+    "read_secret": "ohmgym-licenses/figma-read",
+    "write_secret": "ohmgym-licenses/figma-write",
+    "actions": ["remove_team_member"],
+    "parked_reason": "Starter plan has no team-members REST endpoint; Organization/Enterprise required. Phase 0 probe 2026-08-13."
+  }
+}

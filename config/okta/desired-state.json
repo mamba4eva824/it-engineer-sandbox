@@ -66,6 +66,21 @@
           "action": "READ_ONLY"
         }
       ]
+    },
+    {
+      "variableName": "githubUsername",
+      "title": "GitHub Username",
+      "type": "string",
+      "required": false,
+      "description": "GitHub org login for license-scan membership lookup. Offboarding copies this onto leaver.completed; missing value is identity_unresolved (ticket, no GitHub API call). Example: chris@ohmgym.com → mamba4eva824.",
+      "enum": null,
+      "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$",
+      "permissions": [
+        {
+          "principal": "SELF",
+          "action": "READ_ONLY"
+        }
+      ]
     }
   ],
   "groups": [
