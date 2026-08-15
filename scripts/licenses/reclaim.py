@@ -131,7 +131,8 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
         write_token = os.environ.get("JIRA_WRITE_TOKEN") or os.environ.get("JIRA_API_TOKEN", "")
         read_token = os.environ.get("JIRA_API_TOKEN", "")
         spec = apps_config.get("jira") or {}
-        group_name = spec.get("product_group") or "jira-servicemanagement-users-buffett-dev"
+        group_name = spec.get("product_group") or "jira-users-buffett-dev"
+        group_id = spec.get("product_group_id")
         last: dict[str, Any] | None = None
         for action in spec.get("actions") or ["remove_product_access"]:
             if action == "remove_product_access":
@@ -142,6 +143,7 @@ def _revoke_one_local(app_key: str, row: dict[str, Any], apps_config: dict[str, 
                     auth_email=os.environ.get("JIRA_EMAIL", ""),
                     cloud_id=os.environ.get("JIRA_CLOUD_ID", ""),
                     group_name=group_name,
+                    group_id=group_id,
                 )
             elif action == "deactivate_user":
                 result = deactivate_user(
@@ -261,6 +263,7 @@ def _run_invoke(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
+    _load_dotenv()
     parser = argparse.ArgumentParser(description="License reclaim broker CLI (Phase 3)")
     parser.add_argument("--issue", required=True, help="JSM issue key, e.g. SUP-2")
     parser.add_argument("--apps", required=True, help="Comma-separated app keys, e.g. github,linear")
@@ -280,7 +283,6 @@ def main() -> int:
         help="Call the deployed broker Function URL instead of running connectors locally.",
     )
     args = parser.parse_args()
-    _load_dotenv()
 
     result = _run_invoke(args) if args.invoke else _run_local(args)
     print(json.dumps(result, indent=2))

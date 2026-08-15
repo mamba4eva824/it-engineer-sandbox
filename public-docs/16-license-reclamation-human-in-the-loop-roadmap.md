@@ -4,12 +4,13 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (14 Aug 2026):** Phase 0, Phase 1, Phase 2 (scanner), and Phase 3 (reclaim broker) are all live in `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` applied. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026 (five leavers). Phase 3's broker Lambda, Function URL, DynamoDB GSI, and alarm were applied ~11:07pm; write secrets are not yet promoted with real values and no live reclaim has been run — an explicit next step. Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (15 Aug 2026):** Phase 0–3 are live in `us-west-1`. Phase 4 (Cursor skill + human-in-the-loop reclaim) is in progress this session — skill shipped; live test is [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira). Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
 - [License Reclaimer/phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md)
 - [License Reclaimer/phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md)
+- [License Reclaimer/phase-4-human-in-the-loop.md](License%20Reclaimer/phase-4-human-in-the-loop.md)
 
 Companion to:
 
@@ -258,7 +259,9 @@ Matches the committed stub (Figma parked after Phase 0):
     "auto_reclaim": false,
     "read_secret": "ohmgym-licenses/jira-read",
     "write_secret": "ohmgym-licenses/jira-write",
-    "actions": ["remove_product_access", "deactivate_user"]
+    "actions": ["remove_product_access", "deactivate_user"],
+    "product_group": "jira-users-buffett-dev",
+    "product_group_id": "f757c432-6ca9-41a9-b956-e4b9396a1cf9"
   },
   "figma": {
     "label": "Figma",
@@ -541,6 +544,8 @@ terraform/aws-license-reclaim/ (broker + write IAM)
 
 ### Phase 4 — Human-in-the-loop Cursor / Claude skill
 
+**Status:** Skill shipped; live end-to-end test complete on [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (15 Aug 2026). Log: [phase-4-human-in-the-loop.md](License%20Reclaimer/phase-4-human-in-the-loop.md).
+
 **Objective:** Service desk agent prompts Cursor/Claude from the ticket; copilot reads JSM, calls broker, comments and transitions.
 
 | ID    | Requirement                                                                    |
@@ -559,9 +564,9 @@ terraform/aws-license-reclaim/ (broker + write IAM)
 
 **Exit criteria:**
 
-- [ ] End-to-end: offboard → scan ticket → Cursor reclaim → seats gone → ticket Done
-- [ ] Broker logs show `requested_by` = agent identity / operator email
-- [ ] No write tokens in Cursor env — only broker URL + webhook secret
+- [x] End-to-end: offboard → scan ticket → Cursor reclaim → seats gone → ticket Done (SUP-3, 15 Aug 2026)
+- [x] Broker logs show `requested_by` = agent identity / operator email
+- [x] No write tokens in Cursor env — only broker URL + webhook secret
 
 ---
 
@@ -658,6 +663,7 @@ Phases 0 and 1 are **done** and ran in parallel. Phase 2 needs both. Phase 4 mus
 ## Repository structure (planned)
 
 ```
+.cursor/skills/reclaim-licenses/SKILL.md   # Phase 4 copilot runbook
 config/
   licenses/apps.json
   jira/field-mapping.json          # extended (Phase 1)
@@ -680,6 +686,9 @@ public-docs/
   16-license-reclamation-human-in-the-loop-roadmap.md
   License Reclaimer/phase-0-trials-and-credentials.md
   License Reclaimer/phase-1-jsm-foundation.md
+  License Reclaimer/phase-2-license-scanner.md
+  License Reclaimer/phase-3-reclaim-broker.md
+  License Reclaimer/phase-4-human-in-the-loop.md
 ```
 
 ---
@@ -729,4 +738,5 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | [Phase 0 log](License%20Reclaimer/phase-0-trials-and-credentials.md) | Proven membership APIs + HTTP classification evidence |
 | [Phase 1 log](License%20Reclaimer/phase-1-jsm-foundation.md) | JSM field IDs, request type `4`, project `SUP` |
 | [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda live in `us-west-1`; error contract; seed matrix; apply notes |
-| [Phase 3 log](License%20Reclaimer/phase-3-reclaim-broker.md) | Reclaim broker code-complete; Jira write-path decision; broker API + CLI contract; live-apply checklist (pending) |
+| [Phase 3 log](License%20Reclaimer/phase-3-reclaim-broker.md) | Reclaim broker live; Jira write-path decision; broker API + CLI contract |
+| [Phase 4 log](License%20Reclaimer/phase-4-human-in-the-loop.md) | Cursor skill; SUP-3 human-in-the-loop reclaim |

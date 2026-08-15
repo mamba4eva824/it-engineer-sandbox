@@ -214,7 +214,8 @@ def _revoke_jira(row: dict[str, Any], write_token: str, apps_config: dict[str, A
     """
     read_token = _fetch_secret(JIRA_READ_SECRET_NAME)
     spec = apps_config.get("jira") or {}
-    group_name = spec.get("product_group") or "jira-servicemanagement-users-buffett-dev"
+    group_name = spec.get("product_group") or "jira-users-buffett-dev"
+    group_id = spec.get("product_group_id")
     last: dict[str, Any] | None = None
     for action in spec.get("actions") or ["remove_product_access"]:
         if action == "remove_product_access":
@@ -225,6 +226,7 @@ def _revoke_jira(row: dict[str, Any], write_token: str, apps_config: dict[str, A
                 auth_email=JIRA_EMAIL,
                 cloud_id=JIRA_CLOUD_ID,
                 group_name=group_name,
+                group_id=group_id,
             )
         elif action == "deactivate_user":
             result = deactivate_user(

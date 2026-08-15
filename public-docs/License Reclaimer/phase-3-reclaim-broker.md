@@ -34,7 +34,7 @@ Instead, `remove_product_access` (`DELETE /rest/api/3/group/user`, scope `manage
 
 `config/licenses/apps.json`'s `jira.actions` is `["remove_product_access", "deactivate_user"]` — the broker tries them **in that order**, stopping at the first `"reclaimed"`. `deactivate_user` stays wired as a harmless best-effort second attempt in case a future tenant does have org-admin access, but is not expected to succeed here.
 
-**Confirmed (14 Aug 2026):** `product_group` in `apps.json` is now the real group — `jira-servicemanagement-users-buffett-dev` (groupId `7f60582b-683f-47de-8611-b6f0e0769866`), found via `GET /rest/api/3/user/groups` on the site admin account (both read-only). The site admin is also in `jira-users-buffett-dev` (base Jira Software access, a separate product); `remove_product_access` only removes the one configured group, so a leaver who also holds `jira-users-buffett-dev` keeps base Jira access after reclaim — the JSM seat is the billed product this phase targets, so that's accepted as out of scope for v1, not a bug.
+**Updated (15 Aug 2026):** `product_group` is the **Jira Software product-access group** — `jira-users-buffett-dev` (groupId `f757c432-6ca9-41a9-b956-e4b9396a1cf9`). Seed leavers (Erin / Ned / Tyrion) were invited into this group, not the JSM group. `remove_product_access` prefers `groupId` over the deprecated `groupname` query param. A leaver may also hold `jira-servicemanagement-users-buffett-dev` (JSM product access, a separate product); v1 only removes the one configured group.
 
 ---
 
@@ -107,7 +107,7 @@ Steps 1-4 below are done. Remaining before a live reclaim: promote the write sec
    - Linear: `LINEAR_API_KEY` granted full/admin access in place. No separate `LINEAR_WRITE_KEY`; same fallback pattern already existed for this one.
    - Jira: `JIRA_API_TOKEN` re-minted with all four scopes together (`read:jira-work`, `read:jira-user`, `write:jira-work`, `manage:jira-configuration`) — a first attempt that only *added* `manage:jira-configuration` via Atlassian's "Edit scopes" screen replaced the scope set instead of extending it (401 `"scope does not match"` on every call, including `/myself`, until re-minted with all four at once).
    - **Consequence for Secrets Manager:** because none of these are distinct read/write token *values*, `put-secret-value` for each app's `-read` and `-write` secret will use the **same string** for now. The two Secrets Manager entries and the IAM role separation (scanner can't read write ARNs) still hold as a structural boundary — see [Jira write-path decision](#jira-write-path-decision-no-live-call-made) above for the full rationale.
-2. **JSM product-access group — confirmed:** `jira-servicemanagement-users-buffett-dev`, already set in `config/licenses/apps.json`.
+2. **Jira Software product-access group — confirmed:** `jira-users-buffett-dev` (groupId `f757c432-6ca9-41a9-b956-e4b9396a1cf9`), set in `config/licenses/apps.json`. This is the group seed leavers were invited into.
 3. **Done.** `bash lambdas/license_scanner/build.sh && bash lambdas/license_reclaim_broker/build.sh`
 4. **Done.** `terraform -chdir=terraform/aws-license-reclaim apply` under AWS profile `novatech-sandbox` (account `882248517627`) — added the GSI to the **live** table (backfill took ~6 minutes, confirmed `ACTIVE`, no downtime), the broker role/Lambda/Function URL, the broker alarm, and the webhook-secret shell.
 5. **Not yet done.** Promote secrets (values match the `-read` secret for each app today, per the note above):
@@ -148,11 +148,11 @@ Steps 1-4 below are done. Remaining before a live reclaim: promote the write sec
 
 - `terraform apply`, secret promotion, and the first live reclaim — none run yet (steps 3-6 above).
 - Longer-term: rotate GitHub/Linear/Jira to genuinely separate least-privilege read vs. write tokens instead of one combined-scope token per app (today's fast-path for a sandbox demo, not the ADR-006 end state).
-- `remove_product_access` only removes one group (`jira-servicemanagement-users-buffett-dev`); a leaver also in `jira-users-buffett-dev` keeps base Jira access after reclaim — accepted for v1 (JSM seat is the billed product), revisit if that changes.
+- `remove_product_access` only removes one group (`jira-users-buffett-dev`, the Jira Software product-access group). A leaver also in `jira-servicemanagement-users-buffett-dev` keeps JSM access after reclaim — accepted for v1 (Software is the product the seed users were invited into).
 - Live end-to-end smoke test against a real seeded leaver once secrets are promoted.
 
 ## Not in this phase
 
-- Cursor/Claude skill file, JSM-ticket auto-read, auto-transition-to-Done (Phase 4).
+- Cursor/Claude skill file, JSM-ticket auto-read, auto-transition-to-Done — [phase-4-human-in-the-loop.md](phase-4-human-in-the-loop.md).
 - Auto-reclaim without a human trigger (Phase 5, `auto_reclaim: true`).
 - GRC/dashboard reclaim reporting (Phase 5).

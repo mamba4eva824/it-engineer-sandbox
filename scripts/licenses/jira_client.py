@@ -391,6 +391,7 @@ def remove_product_access(
     auth_email: str,
     cloud_id: str,
     group_name: str,
+    group_id: str | None = None,
 ) -> dict[str, Any]:
     """Revoke Jira product access by removing the account from a product-access group.
 
@@ -398,10 +399,13 @@ def remove_product_access(
     sites): DELETE /rest/api/3/group/user via the standard gateway + a Basic-auth
     token scoped `manage:jira-configuration`, instead of the org-admin
     lifecycle/disable endpoint that `deactivate_user` uses. 200/204/404 are success
-    (404 = user already not in the group, or already gone entirely).
+    (404 = user already not in the group, or already gone entirely). Jira Cloud
+    returns 400 "is not a member of the group" for the same case — also treated
+    as idempotent reclaimed so the broker does not fall through to deactivate_user.
 
-    Only removes the one configured `group_name`. If the account has product
-    access via multiple groups, callers may need to run this once per group.
+    Prefers `groupId` when provided (Cloud deprecated `groupname`). Only removes
+    the one configured group. If the account has product access via multiple
+    groups, callers may need to run this once per group.
     """
     account_id, lookup_error = lookup_account_id(
         email=email,
@@ -423,11 +427,16 @@ def remove_product_access(
         )
 
     url = f"{gateway_base(cloud_id)}/rest/api/3/group/user"
+    params: dict[str, str] = {"accountId": account_id}
+    if group_id:
+        params["groupId"] = group_id
+    else:
+        params["groupname"] = group_name
     try:
         resp = request_with_retry(
             "DELETE",
             url,
-            params={"groupname": group_name, "accountId": account_id},
+            params=params,
             auth=_auth(auth_email, write_token),
             headers={"Accept": "application/json"},
             timeout=15,
@@ -451,6 +460,17 @@ def remove_product_access(
             action_hint="remove_product_access",
             http_status=resp.status_code,
         )
+    # Jira Cloud: user exists but is already absent from this product-access group.
+    if resp.status_code == 400:
+        body = (resp.text or "").lower()
+        if "not a member" in body or "not in the group" in body or "not in this group" in body:
+            return finding(
+                app="jira",
+                status="reclaimed",
+                seat_type=SEAT_TYPE,
+                action_hint="remove_product_access",
+                http_status=resp.status_code,
+            )
     if resp.status_code in (401, 403):
         return finding(
             app="jira",
