@@ -198,6 +198,21 @@ def test_identity_unresolved_tickets_without_github_http(empty_table):
     assert not any("api.github.com" in (r.url or "") for r in rm.request_history)
     assert len(_issue_creates(rm)) == 1
     assert result["status"] in ("partial", "error")
+    slack_posts = [
+        r for r in rm.request_history
+        if r.method == "POST" and "chat.postMessage" in (r.url or "")
+    ]
+    assert slack_posts
+    slack_body = json.loads(slack_posts[0].text)
+    slack_text = json.dumps(slack_body)
+    assert "*Identity:* github" in slack_text
+    assert "Okta githubUsername empty; GitHub membership not scanned" in slack_text
+    assert "*Errors:* none" in slack_text
+    assert "error (identity_unresolved)" not in slack_text
+    creates = _issue_creates(rm)
+    jsm = json.loads(creates[0].text)
+    assert "Identity:" in json.dumps(jsm)
+    assert "Scan errors:" not in json.dumps(jsm)
 
 
 def test_linear_timeout_github_active_is_partial_one_ticket(empty_table):

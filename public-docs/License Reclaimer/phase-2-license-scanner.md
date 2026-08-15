@@ -69,7 +69,7 @@ Continue per app; raise only on infrastructure or work-queue failure.
 | Connector unknown (429/5xx, timeout) | `apps[].error_class=retryable`; keep scanning |
 | Misconfig (GitHub 401/403, Jira site URL, Linear wrong org) | `misconfig`; keep scanning; ticket |
 | Not a member (GitHub 404, Linear absent, Jira empty search) | `not_member` |
-| Identity unresolved (no `githubUsername`) | No GitHub HTTP; ticket |
+| Identity unresolved (no `githubUsername`) | No GitHub HTTP; ticket. Slack/JSM: *Identity*, not *Errors* — Okta githubUsername empty; membership not scanned |
 | Work-queue fail (JSM create 5xx after persist) | DDB `status=error`; Slack; **raise** |
 | All enabled connectors failed | Ticket + Slack + **raise** (`all_connectors_failed`) |
 | Slack fail | Log; do not raise |

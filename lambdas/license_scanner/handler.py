@@ -257,6 +257,30 @@ def error_notes(findings: list[dict[str, Any]]) -> str:
     return "; ".join(parts)[:255]
 
 
+def _identity_apps(findings: list[dict[str, Any]]) -> list[str]:
+    return [
+        a["app"] for a in _enabled(findings)
+        if a.get("error_class") == "identity_unresolved"
+    ]
+
+
+def _connector_error_apps(findings: list[dict[str, Any]]) -> list[str]:
+    return [
+        a["app"] for a in _enabled(findings)
+        if a.get("status") == "error" and a.get("error_class") != "identity_unresolved"
+    ]
+
+
+def _format_app_line(app: dict[str, Any]) -> str:
+    if app.get("error_class") == "identity_unresolved":
+        detail = app.get("error") or "Okta githubUsername empty; GitHub membership not scanned"
+        return f"• `{app['app']}` — identity_unresolved — {detail}"
+    line = f"• `{app['app']}` — {app.get('status')}"
+    if app.get("error_class"):
+        line += f" ({app.get('error_class')})"
+    return line
+
+
 def _ttl_epoch() -> int:
     return int((datetime.now(timezone.utc) + timedelta(days=DYNAMODB_TTL_DAYS)).timestamp())
 
@@ -286,10 +310,17 @@ def _ticket_fields(payload: dict[str, str], findings: list[dict[str, Any]]) -> d
     actives = active_app_keys(findings)
     apps_field = ", ".join(actives) if actives else "none"
     notes = error_notes(findings)
+    identity_only = bool(_identity_apps(findings)) and not _connector_error_apps(findings)
+    if notes and identity_only:
+        scan_line = f"Identity: {notes}"
+    elif notes:
+        scan_line = f"Scan errors: {notes}"
+    else:
+        scan_line = "No connector errors."
     description = (
         f"License scan for {payload['user_email']} (Okta {payload['okta_id']}). "
         f"Active seats: {apps_field}. "
-        + (f"Scan errors: {notes}" if notes else "No connector errors.")
+        + scan_line
     )
     return {
         "project": {"key": JIRA_PROJECT_KEY},
@@ -429,7 +460,8 @@ def _slack_summary(
 ) -> dict[str, Any]:
     enabled = _enabled(findings)
     actives = active_app_keys(findings)
-    errors = [a["app"] for a in enabled if a.get("status") == "error"]
+    errors = _connector_error_apps(findings)
+    identity = _identity_apps(findings)
     if row_status == "clean":
         text = (
             f":white_check_mark: License scan clean — {payload['user_email']} "
@@ -440,11 +472,18 @@ def _slack_summary(
             f":ticket: License scan {row_status} — {payload['user_email']}"
             + (f" [{issue_key}]" if issue_key else "")
         )
-    lines = [f"• `{a['app']}` — {a.get('status')}" + (
-        f" ({a.get('error_class')})" if a.get("error_class") else ""
-    ) for a in enabled]
+    lines = [_format_app_line(a) for a in enabled]
     if extra_error:
         lines.append(f"• work-queue: {extra_error}")
+    summary = (
+        f"*Leaver:* `{payload['user_email']}`\n"
+        f"*Status:* `{row_status}`"
+        + (f"  *Ticket:* `{issue_key}`" if issue_key else "")
+        + (f"\n*Active:* {', '.join(actives) or 'none'}")
+        + (f"\n*Errors:* {', '.join(errors) or 'none'}")
+    )
+    if identity:
+        summary += f"\n*Identity:* {', '.join(identity)} (Okta githubUsername empty; GitHub membership not scanned)"
     blocks: list[dict[str, Any]] = [
         {
             "type": "header",
@@ -454,13 +493,7 @@ def _slack_summary(
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": (
-                    f"*Leaver:* `{payload['user_email']}`\n"
-                    f"*Status:* `{row_status}`"
-                    + (f"  *Ticket:* `{issue_key}`" if issue_key else "")
-                    + (f"\n*Active:* {', '.join(actives) or 'none'}")
-                    + (f"\n*Errors:* {', '.join(errors) or 'none'}")
-                ),
+                "text": summary,
             },
         },
         {

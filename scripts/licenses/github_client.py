@@ -20,7 +20,7 @@ def scan_github(*, org: str, token: str, login: str | None) -> dict[str, Any]:
             action_hint=ACTION_HINT,
             error_class="identity_unresolved",
             retryable=False,
-            error="missing github_username; skipped membership API",
+            error="Okta githubUsername empty; GitHub membership not scanned",
         )
 
     url = f"https://api.github.com/orgs/{org}/members/{login.strip()}"

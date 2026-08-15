@@ -42,6 +42,7 @@ def test_github_missing_login_is_identity_unresolved_no_http():
     assert result["status"] == "error"
     assert result["error_class"] == "identity_unresolved"
     assert result["retryable"] is False
+    assert result["error"] == "Okta githubUsername empty; GitHub membership not scanned"
     assert rm.request_history == []
 
 
