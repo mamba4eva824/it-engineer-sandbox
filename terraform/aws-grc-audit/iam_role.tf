@@ -16,7 +16,7 @@ data "aws_iam_policy_document" "grc_assume_role" {
 resource "aws_iam_role" "grc_jml_audit_read" {
   name               = "${var.name_prefix}-read"
   assume_role_policy = data.aws_iam_policy_document.grc_assume_role.json
-  description        = "Read-only access to JML onboarding/offboarding DynamoDB audit tables for GRC analysts."
+  description        = "Read-only access to JML onboarding/offboarding/license-reclaim DynamoDB audit tables for GRC analysts."
 }
 
 data "aws_iam_policy_document" "grc_dynamodb_read" {
@@ -49,6 +49,22 @@ data "aws_iam_policy_document" "grc_dynamodb_read" {
     resources = [
       data.aws_dynamodb_table.offboarding_logs.arn,
       "${data.aws_dynamodb_table.offboarding_logs.arn}/index/*",
+    ]
+  }
+
+  statement {
+    sid    = "ReadLicenseReclaimAudit"
+    effect = "Allow"
+    actions = [
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:GetItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:DescribeTable",
+    ]
+    resources = [
+      data.aws_dynamodb_table.license_reclaim_logs.arn,
+      "${data.aws_dynamodb_table.license_reclaim_logs.arn}/index/*",
     ]
   }
 }

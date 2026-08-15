@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query JML onboarding/offboarding DynamoDB audit tables (read-only).
+"""Query JML onboarding/offboarding/license-reclaim DynamoDB audit tables (read-only).
 
 Uses the active AWS credential chain — configure a profile that assumes
 ohmgym-grc-jml-audit-read (see terraform/aws-grc-audit outputs).
@@ -7,6 +7,8 @@ ohmgym-grc-jml-audit-read (see terraform/aws-grc-audit outputs).
 Usage:
   AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --date 2026-06-10
   python scripts/grc/query_jml_audit.py --table offboarding --scan --max-items 5
+  python scripts/grc/query_jml_audit.py --table reclaim --date 2026-08-15
+  python scripts/grc/query_jml_audit.py --table all --scan --max-items 5
 """
 
 from __future__ import annotations
@@ -22,7 +24,9 @@ WEST = "us-west-1"
 TABLES = {
     "onboarding": "ohmgym-onboarding-logs",
     "offboarding": "ohmgym-offboarding-logs",
+    "reclaim": "ohmgym-license-reclaim-logs",
 }
+JML_KEYS = ("onboarding", "offboarding")
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -45,9 +49,22 @@ def scan_table(table, max_items: int) -> list[dict]:
     return resp.get("Items", [])
 
 
+def _targets(table_arg: str) -> list[str]:
+    if table_arg == "all":
+        return list(TABLES.keys())
+    if table_arg == "both":
+        return list(JML_KEYS)
+    return [table_arg]
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Read-only JML audit table queries.")
-    parser.add_argument("--table", choices=("onboarding", "offboarding", "both"), default="both")
+    parser = argparse.ArgumentParser(description="Read-only JML / license-reclaim audit table queries.")
+    parser.add_argument(
+        "--table",
+        choices=("onboarding", "offboarding", "reclaim", "both", "all"),
+        default="both",
+        help="both = onboarding+offboarding; all = those plus reclaim.",
+    )
     parser.add_argument("--date", help="run_date partition key (YYYY-MM-DD) for Query.")
     parser.add_argument("--scan", action="store_true", help="Scan instead of query (requires no --date).")
     parser.add_argument("--max-items", type=int, default=25)
@@ -61,7 +78,7 @@ def main() -> None:
         sys.exit(1)
 
     resource = boto3.resource("dynamodb", region_name=WEST)
-    targets = list(TABLES.keys()) if args.table == "both" else [args.table]
+    targets = _targets(args.table)
 
     for key in targets:
         name = TABLES[key]

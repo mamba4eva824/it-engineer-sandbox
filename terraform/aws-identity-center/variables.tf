@@ -44,6 +44,12 @@ variable "offboarding_table_name" {
   default     = "ohmgym-offboarding-logs"
 }
 
+variable "license_reclaim_table_name" {
+  description = "License reclaim audit DynamoDB table."
+  type        = string
+  default     = "ohmgym-license-reclaim-logs"
+}
+
 variable "developer_user_emails" {
   description = "Emails provisioned in Identity Store and added to the Developers group."
   type        = list(string)

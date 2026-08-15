@@ -1,10 +1,11 @@
 # GRC JML Audit Access — Okta Identity, AWS Read Role, Claude Desktop Queries
 
-GRC and Security analysts need read-only visibility into joiner/leaver automation without IT-Ops admin credentials. This work provisions **Bryan Wong** (GRC Analyst) in Okta, gates membership via the **`access-jml-audit`** group, and grants **scoped DynamoDB read access** to the JML onboarding/offboarding audit tables. Analysts query those tables from **Claude Desktop** using an AWS MCP connector and an assume-role profile.
+GRC and Security analysts need read-only visibility into joiner/leaver automation and license reclaim outcomes without IT-Ops admin credentials. This work provisions **Bryan Wong** (GRC Analyst) in Okta, gates membership via the **`access-jml-audit`** group, and grants **scoped DynamoDB read access** to the JML onboarding/offboarding audit tables and `ohmgym-license-reclaim-logs`. Analysts query those tables from **Claude Desktop** using an AWS MCP connector and an assume-role profile.
 
 Companion to:
 - [10-aws-scheduled-onboarding-workflow.md](10-aws-scheduled-onboarding-workflow.md) — writes `ohmgym-onboarding-logs`
 - [11-aws-scheduled-offboarding-workflow.md](11-aws-scheduled-offboarding-workflow.md) — writes `ohmgym-offboarding-logs`
+- [16-license-reclamation-human-in-the-loop-roadmap.md](16-license-reclamation-human-in-the-loop-roadmap.md) — writes `ohmgym-license-reclaim-logs`
 - [04-okta-migration.md](04-okta-migration.md) — Okta config-as-code pattern
 - [02-aws-saml-federation.md](02-aws-saml-federation.md) — full Okta→AWS SAML upgrade path (deferred)
 
@@ -17,9 +18,10 @@ Companion to:
 | Okta group | `access-jml-audit` — manual membership (like `access-gws`) |
 | Onboarding audit table | `ohmgym-onboarding-logs` (`us-west-1`) |
 | Offboarding audit table | `ohmgym-offboarding-logs` (`us-west-1`) |
+| License reclaim audit table | `ohmgym-license-reclaim-logs` (`us-west-1`) |
 | Retention | 90-day DynamoDB TTL on audit rows |
 
-Audit tables store one row per `(run_date, user_id)` with status, department, role title, Okta response code, and batch metadata. GRC uses them to review whether scheduled JML runs succeeded without access to Okta API secrets, Lambda execution roles, or write paths.
+Audit tables store one row per `(run_date, user_id)` with status, department, role title, Okta response code, and batch metadata. License reclaim rows add `apps[]`, `jira_issue_key`, and reclaim status (`clean` / `ticketed` / `reclaimed` / `partial` / `error`). GRC uses them to review whether scheduled JML runs and seat reclamations succeeded without access to Okta API secrets, Lambda execution roles, or write paths.
 
 ## Access path implemented: Identity Center + C-hybrid
 
@@ -49,8 +51,9 @@ AWS (882248517627, us-west-1)
   ├── IAM role: ohmgym-grc-jml-audit-read
   │     └── inline policy: dynamodb Query/Scan/GetItem/DescribeTable
   │           on ohmgym-onboarding-logs + ohmgym-offboarding-logs
+  │           + ohmgym-license-reclaim-logs
   │
-  └── DynamoDB audit tables (written by JML Lambdas)
+  └── DynamoDB audit tables (written by JML / license-scanner Lambdas)
 
 Claude Desktop
   │
@@ -111,7 +114,7 @@ terraform init && terraform apply
 | Inline role policy | `ohmgym-grc-jml-audit-dynamodb-read` |
 | IAM policy (optional attach) | `ohmgym-grc-jml-audit-assume` |
 
-**DynamoDB actions allowed:** `Query`, `Scan`, `GetItem`, `BatchGetItem`, `DescribeTable` on both audit tables only. **Denied:** `PutItem`, `UpdateItem`, `DeleteItem`, and all other services.
+**DynamoDB actions allowed:** `Query`, `Scan`, `GetItem`, `BatchGetItem`, `DescribeTable` on the three audit tables only. **Denied:** `PutItem`, `UpdateItem`, `DeleteItem`, and all other services.
 
 **Path B upgrade:** Set `identity_center_instance_arn` and `identity_store_id` in `terraform.tfvars` to activate `JMLAuditReadOnly` permission set and Identity Store users in [`sso.tf`](../terraform/aws-grc-audit/sso.tf).
 
@@ -149,6 +152,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 - *Using aws-grc-audit MCP, scan `ohmgym-offboarding-logs` in `us-west-1`. Return first 10 items.*
 - *Query `ohmgym-onboarding-logs` in `us-west-1` where `run_date` = "2026-06-15".*
+- *Query `ohmgym-license-reclaim-logs` in `us-west-1` where `run_date` = "2026-08-15". Return login, status, apps, and jira_issue_key.*
 
 **CLI alternative:** [`scripts/grc/query_jml_audit.py`](../scripts/grc/query_jml_audit.py)
 
@@ -161,11 +165,13 @@ If Claude reports AccessDenied and suggests adding policy for `off-boarding-logs
 | Region `us-east-1` | **`us-west-1`** (JML stacks and audit tables) |
 | Table `off-boarding-logs` | **`ohmgym-offboarding-logs`** |
 | Table `onboarding-logs` | **`ohmgym-onboarding-logs`** |
+| Table `license-reclaim-logs` | **`ohmgym-license-reclaim-logs`** |
 
 Verify access with CLI (same profile as MCP):
 
 ```bash
 AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table offboarding --scan --max-items 2
+AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table reclaim --date 2026-08-15
 ```
 
 If CLI succeeds, re-prompt Claude with exact table name and region. Full guide: [claude-desktop-grc-aws-mcp.md](claude-desktop-grc-aws-mcp.md).
@@ -176,7 +182,7 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table o
 
 ## Security controls
 
-- **Least privilege:** Read-only on two named DynamoDB tables; no Secrets Manager, Lambda, or broad `dynamodb:*`.
+- **Least privilege:** Read-only on three named DynamoDB tables; no Secrets Manager, Lambda, or broad `dynamodb:*`.
 - **Write denied:** `PutItem` returns `AccessDeniedException` under the GRC role (validated live).
 - **Group-gated identity:** Only `access-jml-audit` members should receive AWS access; Okta group is the governance record.
 - **Separation of identities:** Claude Desktop OAuth (`weinreichchris@gmail.com`) ≠ AWS role session (`ohmgym-grc-jml-audit-read/grc-test`).
@@ -190,6 +196,7 @@ AWS_PROFILE=ohmgym-grc-jml-audit python scripts/grc/query_jml_audit.py --table o
 | `terraform apply` in `terraform/aws-grc-audit/` | 3 resources created |
 | `sts assume-role` → `ohmgym-grc-jml-audit-read` | Success |
 | `dynamodb scan` on `ohmgym-offboarding-logs` as GRC role | Success (sample rows returned) |
+| `dynamodb query` on `ohmgym-license-reclaim-logs` as GRC role | Success after IAM policy expand (P5-R1) |
 | `dynamodb put-item` as GRC role | `AccessDeniedException` |
 | IAM Identity Center instances | Active in `882248517627` (documented in `config/aws/desired-state.json`) |
 | Okta group + users | Config committed; apply with `.env` credentials |

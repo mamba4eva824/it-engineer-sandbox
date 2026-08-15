@@ -1,8 +1,9 @@
 # Provider + Terraform version pinning for the ohmgym-grc-jml-audit stack.
 #
 # Grants GRC analysts read-only DynamoDB access to JML onboarding/offboarding
-# audit tables. Uses a standalone IAM role when IAM Identity Center is not
-# enabled; optional SSO permission set resources activate when instance ARN is set.
+# and license-reclaim audit tables. Uses a standalone IAM role when IAM
+# Identity Center is not enabled; optional SSO permission set resources
+# activate when instance ARN is set.
 
 terraform {
   required_version = ">= 1.6.0"

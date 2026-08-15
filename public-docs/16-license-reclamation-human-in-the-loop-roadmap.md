@@ -576,7 +576,7 @@ terraform/aws-license-reclaim/ (broker + write IAM)
 
 | ID    | Requirement                                                                                                              |
 | ----- | ------------------------------------------------------------------------------------------------------------------------ |
-| P5-R1 | GRC read access to `ohmgym-license-reclaim-logs` (extend doc 12 pattern)                                                 |
+| P5-R1 | GRC read access to `ohmgym-license-reclaim-logs` (extend doc 12 pattern) — **done** (IAM + CLI) |
 | P5-R2 | Dashboard card: open reclaim tickets / seats recovered this month                                                        |
 | P5-R3 | Weekly report script: ticketed vs reclaimed vs aged SLA                                                                  |
 | P5-R4 | Optional: for apps with `auto_reclaim: true`, broker runs without Cursor after ticket create (still writes Jira comment) |
@@ -585,7 +585,7 @@ terraform/aws-license-reclaim/ (broker + write IAM)
 
 **Exit criteria:**
 
-- [ ] GRC can query reclaim outcomes by date without IT-Ops credentials
+- [x] GRC can query reclaim outcomes by date without IT-Ops credentials
 - [ ] At least one app can demo auto-reclaim behind a feature flag
 - [ ] Interview demo script under 10 minutes
 

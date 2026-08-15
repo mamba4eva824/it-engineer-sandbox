@@ -42,7 +42,7 @@
       "identityStoreGroup": "GRC",
       "oktaGroup": "access-jml-audit",
       "iamRoleEquivalent": "ohmgym-grc-jml-audit-read",
-      "description": "Read-only DynamoDB access to ohmgym-onboarding-logs and ohmgym-offboarding-logs."
+      "description": "Read-only DynamoDB access to ohmgym-onboarding-logs, ohmgym-offboarding-logs, and ohmgym-license-reclaim-logs."
     }
   ],
   "grcJmlAudit": {
@@ -54,7 +54,8 @@
     "permissionSetName": "JMLAuditReadOnly",
     "dynamodbTables": [
       "ohmgym-onboarding-logs",
-      "ohmgym-offboarding-logs"
+      "ohmgym-offboarding-logs",
+      "ohmgym-license-reclaim-logs"
     ],
     "authorizedUsers": [
       {
