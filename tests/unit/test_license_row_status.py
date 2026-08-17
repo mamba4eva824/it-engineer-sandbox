@@ -35,6 +35,17 @@ def test_identity_unresolved_without_active_seats_is_no_licenses():
     assert err is None
 
 
+def test_not_assigned_without_active_seats_is_no_licenses():
+    status, err = compute_scan_row_status([
+        {"app": "github", "status": "not_assigned"},
+        {"app": "linear", "status": "not_member"},
+        {"app": "jira", "status": "not_member"},
+        {"app": "figma", "status": "skipped"},
+    ])
+    assert status == NO_LICENSES_TO_RECLAIM
+    assert err is None
+
+
 def test_connector_error_without_active_seats_stays_partial():
     status, err = compute_scan_row_status([
         {"app": "github", "status": "error", "error_class": "misconfig"},

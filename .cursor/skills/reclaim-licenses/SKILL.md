@@ -38,7 +38,7 @@ Parse `customfield_10141` as app keys (split on comma, trim, lowercase). Ignore 
 - Requested apps are missing from the ticket list or from the allowlist.
 - Ticket has no confirmed apps (`none` / empty) and the user asked to revoke seats.
 
-When apps are `none` / empty and the operator asks to **close** the ticket (not revoke seats): comment the close-out, transition toward Done, and expect DynamoDB overall `status` = `No Licenses to Reclaim`. Scanner persist and broker/CLI reclaim rollup write that status when there are no scan-`active` seats (including `identity_unresolved` with no confirmed seats). Connector `error` (misconfig / retryable) still rolls up to `partial` / `error` so unknown never looks clear (P2-R13). Do not invent a user or an app list. If the prompt omits apps, use the ticket list. If it names a subset that is on the ticket, use the subset.
+When apps are `none` / empty and the operator asks to **close** the ticket (not revoke seats): comment the close-out, transition toward Done, and expect DynamoDB overall `status` = `No Licenses to Reclaim`. Scanner persist and broker/CLI reclaim rollup write that status when there are no scan-`active` seats (including `not_assigned` or historical `identity_unresolved` with no confirmed seats). Connector `error` (misconfig / retryable) still rolls up to `partial` / `error` so unknown never looks clear (P2-R13). Do not invent a user or an app list. If the prompt omits apps, use the ticket list. If it names a subset that is on the ticket, use the subset.
 
 ### 2. Propose the plan
 
@@ -50,7 +50,7 @@ python scripts/licenses/reclaim.py --issue {KEY} --apps {comma,list} --invoke
 
 `--invoke` only. Do not run local connector `--apply`.
 
-Eligible apps proceed. `not_active_in_findings` / `already_reclaimed` stay skipped. Broker never revokes scan `error` or `identity_unresolved`.
+Eligible apps proceed. `not_active_in_findings` / `already_reclaimed` stay skipped. Broker never revokes scan `error`, `not_assigned`, or `identity_unresolved`. Treat `not_assigned` like `not_member` (never mapped in Okta; not unresolved identity).
 
 ### 3. Human confirm (required)
 

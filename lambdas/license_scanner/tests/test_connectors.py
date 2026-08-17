@@ -36,13 +36,13 @@ def test_github_401_is_misconfig_not_not_member():
     assert result["status"] != "not_member"
 
 
-def test_github_missing_login_is_identity_unresolved_no_http():
+def test_github_missing_login_is_not_assigned_no_http():
     with requests_mock.Mocker() as rm:
         result = scan_github(org=TEST_ORG, token="t", login=None)
-    assert result["status"] == "error"
-    assert result["error_class"] == "identity_unresolved"
+    assert result["status"] == "not_assigned"
+    assert result["error_class"] is None
     assert result["retryable"] is False
-    assert result["error"] == "Okta githubUsername empty; GitHub membership not scanned"
+    assert result["error"] == "No GitHub username on Okta profile; membership not queried"
     assert rm.request_history == []
 
 

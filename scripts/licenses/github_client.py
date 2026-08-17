@@ -1,4 +1,4 @@
-"""GitHub org membership scan. 204=active, 404=not_member, 401/403=misconfig."""
+"""GitHub org membership scan. 204=active, 404=not_member, empty login=not_assigned, 401/403=misconfig."""
 from __future__ import annotations
 
 from typing import Any
@@ -15,12 +15,10 @@ def scan_github(*, org: str, token: str, login: str | None) -> dict[str, Any]:
     if not (login or "").strip():
         return finding(
             app="github",
-            status="error",
+            status="not_assigned",
             seat_type=SEAT_TYPE,
             action_hint=ACTION_HINT,
-            error_class="identity_unresolved",
-            retryable=False,
-            error="Okta githubUsername empty; GitHub membership not scanned",
+            error="No GitHub username on Okta profile; membership not queried",
         )
 
     url = f"https://api.github.com/orgs/{org}/members/{login.strip()}"

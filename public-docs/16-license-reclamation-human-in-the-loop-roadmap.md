@@ -329,7 +329,8 @@ flowchart TD
 | **Connector unknown** | 429/5xx after in-Lambda retries, timeout, Linear GraphQL transport error | Record `apps[].error`; keep scanning other apps | No |
 | **Misconfig** | Jira called at site URL (Phase 0 401), missing `JIRA_CLOUD_ID`, Linear key from wrong workspace | Same as connector unknown; `error_class=misconfig` | No (unless **all** enabled apps fail — then also raise) |
 | **Not a member** | GitHub 404, Linear human email absent, Jira user search empty | `status=not_member` — success path | No |
-| **Identity unresolved** | No GitHub username for Okta email | `error_class=identity_unresolved`; do not call GitHub | No (ticket still opens) |
+| **Not assigned** | No GitHub username on Okta profile | `status=not_assigned`; do not call GitHub | No |
+| **Identity unresolved** | Broker write with empty GitHub login (historical scan rows may still carry this class) | `error_class=identity_unresolved`; do not revoke | No |
 | **Work-queue fail** | Seats or scan errors exist but JSM issue create fails | DDB `status=error`; Slack error line | **Yes** (raise after persist) |
 | **Visibility fail** | Slack `chat.postMessage` fails | Log; do not fail the scan | No (email is failure-only, same as [doc 11](11-aws-scheduled-offboarding-workflow.md)) |
 
@@ -343,7 +344,7 @@ Connectors must not collapse auth, SKU, or gateway failures into `not_member` (A
 
 | App | Probe | `active` | `not_member` | `misconfig` / SKU | Retryable |
 | --- | --- | --- | --- | --- | --- |
-| **GitHub** | `GET /orgs/ohmgym-sandbox/members/{login}` | 204 | **404** | 401/403 | 429/5xx |
+| **GitHub** | `GET /orgs/ohmgym-sandbox/members/{login}` | 204 | **404**; empty Okta login is `not_assigned` (no HTTP) | 401/403 | 429/5xx |
 | **Jira** | `GET https://api.atlassian.com/ex/jira/{cloudId}/rest/api/3/user/search?query={email}` | ≥1 matching account | Empty array | Site URL `*.atlassian.net` **401**; missing `JIRA_CLOUD_ID` | 429/5xx |
 | **Linear** | GraphQL `users { nodes { email active } }` on workspace `it-systems-sandbox` | Human email present and `active` | Human email absent | Viewer org uuid ≠ `2cb9e2d3-f42b-42a1-a066-8bc4006c2624`; ignore `*.linear.app` identities | HTTP 429/5xx or GraphQL transport failure |
 | **Figma** | skipped (`enabled: false`) | — | — | If re-enabled: `GET /v1/teams/{id}/members` **404 is SKU**, not absence | — |
@@ -352,7 +353,7 @@ Jira v1 scan is **account-exists**, not licensed product seats. `GET /applicatio
 
 ### Identity resolution
 
-GitHub membership is **login-based**; `leaver.completed` carries **email**. Missing username mapping is `identity_unresolved` (ticket + notes), not a silent skip and not a GitHub 404. Mapping source is still an [open question](#open-questions) (env map vs Okta profile vs ticket field). Linear and Jira match on email directly.
+GitHub membership is **login-based**; `leaver.completed` carries **email**. Empty Okta `githubUsername` is `not_assigned` (never mapped; no GitHub API; no identity-only ticket), not a GitHub 404 and not a scan error. Linear and Jira match on email directly.
 
 ### Retries, DLQ, idempotency, alarms
 
@@ -481,7 +482,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 | P2-R12 | Isolate connectors: one app’s exception does not skip the others (ADR-010)                                              |
 | P2-R13 | Ticket on unknown: never map connector `error` to row `status=clean`                                                    |
 | P2-R14 | Jira connector uses `https://api.atlassian.com/ex/jira/{cloudId}/...` only (ADR-011)                                    |
-| P2-R15 | Missing GitHub username → `identity_unresolved`; do not call membership API; still ticket                               |
+| P2-R15 | Missing GitHub username → `not_assigned`; do not call membership API; do not ticket for GitHub-only missing username |
 | P2-R16 | Raise (SNS path) on infra, JSM create failure after persist, or all enabled connectors failed                           |
 
 **Exit criteria:**
@@ -722,7 +723,7 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | 3   | Auto-reclaim GitHub in Phase 5?                     | Yes candidate (`auto_reclaim: true`); keep Linear/Jira human-gated   |
 | 4   | Shared JSM project with access-review or separate?  | **Resolved:** same site `buffett-dev`; project `SUP`; separate request type |
 | 5   | Register NHIs in Okta for AI Agents?                | Stretch after API Services app works                                 |
-| 6   | GitHub username for Okta email?                     | **Resolved:** Okta profile `githubUsername`. Offboarding copies it onto `leaver.completed`. Missing → `identity_unresolved` (ticket, no GitHub API). |
+| 6   | GitHub username for Okta email?                     | **Resolved:** Okta profile `githubUsername`. Offboarding copies it onto `leaver.completed`. Missing → `not_assigned` (no GitHub API, no identity ticket). |
 
 ---
 

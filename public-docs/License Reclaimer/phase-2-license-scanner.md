@@ -15,7 +15,7 @@ Roadmap: [16-license-reclamation-human-in-the-loop-roadmap.md](../16-license-rec
 - Scanner Lambda `ohmgym-license-scanner`: isolated connectors, always persist, ticket or reuse JSM request type `4`, Slack on every run, raise only on infra / JSM create fail / all connectors failed.
 - Connectors: `scripts/licenses/{github,linear,jira}_client.py`. Figma stays `enabled: false`.
 - Terraform stack `terraform/aws-license-reclaim/`: EventBridge rule (`maximum_retry_attempts = 2`), SQS DLQ `ohmgym-license-scanner-dlq`, DynamoDB `ohmgym-license-reclaim-logs`, read-only Secrets Manager IAM, SNS Errors ≥ 1 alarm.
-- Okta profile attribute `githubUsername` in `config/okta/desired-state.json` (open question 6). Missing value → `identity_unresolved`; GitHub membership API is not called; ticket still opens (P2-R15).
+- Okta profile attribute `githubUsername` in `config/okta/desired-state.json` (open question 6). Missing value → `not_assigned`; GitHub membership API is not called; no identity-only ticket (P2-R15). Historical 14 Aug DynamoDB rows may still show `identity_unresolved`.
 - CLI: `scripts/licenses/scan_cli.py --dry-run` (local `.env` tokens) or `--invoke` (deployed Lambda).
 - Unit tests: `lambdas/license_scanner/tests/` plus offboarding emit tests. CI: `.github/workflows/license-scanner-ci.yml`.
 
@@ -46,16 +46,16 @@ Five Okta users have `endDate=2026-08-14` so the 17:00 America/Los_Angeles offbo
 | Person | Okta login | Okta status | `githubUsername` | GitHub | Linear | Jira | Scanner ticket |
 |---|---|---|---|---|---|---|---|
 | Erin Patel | `chris+access-review-01@ohmgym.com` | ACTIVE | `erin-patel` | Seat | Not a member | Seat | Yes — github, jira |
-| Marcus Lee | `chris+access-review-02@ohmgym.com` | ACTIVE | — | Unresolved | Not a member | Not a member | Yes — `identity_unresolved` (deliberate no-license user) |
-| Ned Stark | `chris+ned@ohmgym.com` | PROVISIONED | — | Unresolved | Not a member | Seat | Yes — jira + GitHub unresolved |
-| Tyrion Lannister | `chris+tyrion@ohmgym.com` | ACTIVE | — | Unresolved | Not a member | Seat | Yes — jira + GitHub unresolved |
-| Elena Vasquez | `chris+elena.vasqueuz@ohmgym.com` | ACTIVE | — | Unresolved | Seat | Not a member | Yes — linear + GitHub unresolved |
+| Marcus Lee | `chris+access-review-02@ohmgym.com` | ACTIVE | — | Not assigned | Not a member | Not a member | No — `not_assigned` (deliberate no-license user) |
+| Ned Stark | `chris+ned@ohmgym.com` | PROVISIONED | — | Not assigned | Not a member | Seat | Yes — jira |
+| Tyrion Lannister | `chris+tyrion@ohmgym.com` | ACTIVE | — | Not assigned | Not a member | Seat | Yes — jira |
+| Elena Vasquez | `chris+elena.vasqueuz@ohmgym.com` | ACTIVE | — | Not assigned | Seat | Not a member | Yes — linear |
 
 Elena’s Okta login is the typo `vasqueuz`. GitHub org members at seed time: `erin-patel`, `mamba4eva824`. Tyrion still had a pending Owner invite by email; that is not membership.
 
-Marcus is the clean-seat negative: no GitHub / Linear / Jira seats. He still tickets because missing `githubUsername` is an incomplete scan (P2-R15), not `status=clean`. A true no-ticket case needs a GitHub login that 404s plus Linear/Jira `not_member`.
+Marcus is the clean-seat negative: no GitHub / Linear / Jira seats. Empty `githubUsername` is `not_assigned` (never mapped in Okta), not an incomplete scan — no ticket. A GitHub login that 404s plus Linear/Jira `not_member` is the other no-ticket path. 14 Aug live DynamoDB rows still show `identity_unresolved` until a new scan.
 
-Offboarding itself does **not** create JSM issues. Each successful deactivate emits `leaver.completed`; the scanner opens one License Reclamation request (`SUP`, request type `"4"`) when any enabled app is `active` or `error`. Against this matrix that is five tickets if the 17:00 run succeeds.
+Offboarding itself does **not** create JSM issues. Each successful deactivate emits `leaver.completed`; the scanner opens one License Reclamation request (`SUP`, request type `"4"`) when any enabled app is `active` or `error`. Against this matrix that is four tickets (Marcus does not ticket).
 
 ---
 
@@ -69,7 +69,7 @@ Continue per app; raise only on infrastructure or work-queue failure.
 | Connector unknown (429/5xx, timeout) | `apps[].error_class=retryable`; keep scanning |
 | Misconfig (GitHub 401/403, Jira site URL, Linear wrong org) | `misconfig`; keep scanning; ticket |
 | Not a member (GitHub 404, Linear absent, Jira empty search) | `not_member` |
-| Identity unresolved (no `githubUsername`) | No GitHub HTTP; ticket. Slack/JSM: *Identity*, not *Errors* — Okta githubUsername empty; membership not scanned |
+| Not assigned (no `githubUsername`) | No GitHub HTTP; `status=not_assigned`; no identity-only ticket |
 | Work-queue fail (JSM create 5xx after persist) | DDB `status=error`; Slack; **raise** |
 | All enabled connectors failed | Ticket + Slack + **raise** (`all_connectors_failed`) |
 | Slack fail | Log; do not raise |

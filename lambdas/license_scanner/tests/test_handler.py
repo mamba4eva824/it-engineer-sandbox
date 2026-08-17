@@ -218,33 +218,27 @@ def test_github_active_opens_ticket_without_figma(empty_table):
     assert body["fields"]["customfield_10010"] == "4"
 
 
-def test_identity_unresolved_tickets_without_github_http(empty_table):
+def test_missing_github_username_is_not_assigned_no_ticket(empty_table):
     with requests_mock.Mocker() as rm:
         _mock_linear_absent(rm)
         _mock_jira_not_member(rm)
-        _mock_jira_create(rm, key="SUP-7")
         _mock_slack(rm)
         result = handler.lambda_handler(_event(github_username=None), None)
-    assert any(a["app"] == "github" and a["error_class"] == "identity_unresolved" for a in result["apps"])
+    github = next(a for a in result["apps"] if a["app"] == "github")
+    assert github["status"] == "not_assigned"
+    assert github["error_class"] is None
     assert not any("api.github.com" in (r.url or "") for r in rm.request_history)
-    assert len(_issue_creates(rm)) == 1
+    assert _issue_creates(rm) == []
     assert result["status"] == "No Licenses to Reclaim"
-    assert result["ticket_wanted"] is True
+    assert result["ticket_wanted"] is False
     slack_posts = [
         r for r in rm.request_history
         if r.method == "POST" and "chat.postMessage" in (r.url or "")
     ]
     assert slack_posts
-    slack_body = json.loads(slack_posts[0].text)
-    slack_text = json.dumps(slack_body)
-    assert "*Identity:* github" in slack_text
-    assert "Okta githubUsername empty; GitHub membership not scanned" in slack_text
-    assert "*Errors:* none" in slack_text
-    assert "error (identity_unresolved)" not in slack_text
-    creates = _issue_creates(rm)
-    jsm = json.loads(creates[0].text)
-    assert "Identity:" in json.dumps(jsm)
-    assert "Scan errors:" not in json.dumps(jsm)
+    slack_text = json.dumps(json.loads(slack_posts[0].text))
+    assert "*Identity:* github" not in slack_text
+    assert "identity_unresolved" not in slack_text
 
 
 def test_linear_timeout_github_active_is_partial_one_ticket(empty_table):
