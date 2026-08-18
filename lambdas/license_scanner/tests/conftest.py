@@ -63,10 +63,18 @@ _ddb.create_table(
     AttributeDefinitions=[
         {"AttributeName": "run_date", "AttributeType": "S"},
         {"AttributeName": "user_id", "AttributeType": "S"},
+        {"AttributeName": "jira_issue_key", "AttributeType": "S"},
     ],
     KeySchema=[
         {"AttributeName": "run_date", "KeyType": "HASH"},
         {"AttributeName": "user_id", "KeyType": "RANGE"},
+    ],
+    GlobalSecondaryIndexes=[
+        {
+            "IndexName": "jira_issue_key-index",
+            "KeySchema": [{"AttributeName": "jira_issue_key", "KeyType": "HASH"}],
+            "Projection": {"ProjectionType": "ALL"},
+        }
     ],
     BillingMode="PAY_PER_REQUEST",
 )

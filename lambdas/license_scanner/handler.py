@@ -291,7 +291,12 @@ def _get_existing(run_date: str, user_id: str) -> dict[str, Any] | None:
 
 
 def persist_findings(item: dict[str, Any]) -> None:
-    _table.put_item(Item=item)
+    # Sparse GSI: DynamoDB rejects empty-string index keys. Omit until JSM
+    # returns a real issue key (persist-before-ticket used to write "").
+    clean = dict(item)
+    if not (clean.get("jira_issue_key") or "").strip():
+        clean.pop("jira_issue_key", None)
+    _table.put_item(Item=clean)
 
 
 def _jql_guard(email: str, run_id: str) -> str:

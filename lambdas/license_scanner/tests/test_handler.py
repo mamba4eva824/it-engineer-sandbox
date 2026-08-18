@@ -218,6 +218,31 @@ def test_github_active_opens_ticket_without_figma(empty_table):
     assert body["fields"]["customfield_10010"] == "4"
 
 
+def test_missing_github_username_linear_active_persists_and_tickets(empty_table):
+    """Empty jira_issue_key must not block PutItem on the sparse GSI."""
+    with requests_mock.Mocker() as rm:
+        rm.post(
+            "https://api.linear.app/graphql",
+            json={
+                "data": {
+                    "organization": {"id": LINEAR_ORG},
+                    "users": {
+                        "nodes": [{"id": "u1", "email": EMAIL, "active": True}],
+                    },
+                }
+            },
+        )
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-77")
+        _mock_slack(rm)
+        result = handler.lambda_handler(_event(github_username=None), None)
+    assert result["jira_issue_key"] == "SUP-77"
+    github = next(a for a in result["apps"] if a["app"] == "github")
+    assert github["status"] == "not_assigned"
+    item = empty_table.get_item(Key={"run_date": RUN_DATE, "user_id": OKTA_ID})["Item"]
+    assert item["jira_issue_key"] == "SUP-77"
+
+
 def test_missing_github_username_is_not_assigned_no_ticket(empty_table):
     with requests_mock.Mocker() as rm:
         _mock_linear_absent(rm)
