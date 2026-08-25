@@ -270,6 +270,191 @@ def update_issue(
     return resp.status_code
 
 
+def get_issue(
+    *,
+    cloud_id: str,
+    auth_email: str,
+    token: str,
+    issue_key: str,
+    fields: str | None = None,
+) -> tuple[int, dict[str, Any]]:
+    url = f"{gateway_base(cloud_id)}/rest/api/3/issue/{issue_key}"
+    params: dict[str, str] = {}
+    if fields:
+        params["fields"] = fields
+    resp = request_with_retry(
+        "GET",
+        url,
+        auth=_auth(auth_email, token),
+        headers=_jira_headers(),
+        params=params or None,
+        timeout=15,
+    )
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {"error": truncate_error(resp.text)}
+    return resp.status_code, body
+
+
+def list_transitions(
+    *,
+    cloud_id: str,
+    auth_email: str,
+    token: str,
+    issue_key: str,
+) -> tuple[int, list[dict[str, Any]]]:
+    url = f"{gateway_base(cloud_id)}/rest/api/3/issue/{issue_key}/transitions"
+    resp = request_with_retry(
+        "GET",
+        url,
+        auth=_auth(auth_email, token),
+        headers=_jira_headers(),
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        return resp.status_code, []
+    try:
+        body = resp.json()
+    except ValueError:
+        return resp.status_code, []
+    return resp.status_code, body.get("transitions") or []
+
+
+def transition_issue(
+    *,
+    cloud_id: str,
+    auth_email: str,
+    token: str,
+    issue_key: str,
+    transition_id: str,
+    fields: dict[str, Any] | None = None,
+) -> int:
+    url = f"{gateway_base(cloud_id)}/rest/api/3/issue/{issue_key}/transitions"
+    payload: dict[str, Any] = {"transition": {"id": str(transition_id)}}
+    if fields:
+        payload["fields"] = fields
+    resp = request_with_retry(
+        "POST",
+        url,
+        auth=_auth(auth_email, token),
+        headers=_jira_headers(),
+        json=payload,
+        timeout=15,
+    )
+    return resp.status_code
+
+
+DONE_TRANSITION_NAMES = frozenset({"done", "resolved", "close", "closed", "complete", "completed"})
+HOP_TRANSITION_NAMES = frozenset({"start", "start progress", "start work", "in progress"})
+_MAX_DONE_HOPS = 6
+
+
+def _transition_dest_is_done(trans: dict[str, Any]) -> bool:
+    to = trans.get("to") or {}
+    category = ((to.get("statusCategory") or {}).get("key") or "").lower()
+    name = (trans.get("name") or "").lower()
+    to_name = (to.get("name") or "").lower()
+    return category == "done" or name in DONE_TRANSITION_NAMES or to_name in DONE_TRANSITION_NAMES
+
+
+def _issue_is_done(issue_body: dict[str, Any]) -> bool:
+    status = (issue_body.get("fields") or {}).get("status") or {}
+    category = ((status.get("statusCategory") or {}).get("key") or "").lower()
+    name = (status.get("name") or "").lower()
+    return category == "done" or name in DONE_TRANSITION_NAMES
+
+
+def _pick_done_or_hop(
+    transitions: list[dict[str, Any]],
+    visited_status_ids: set[str],
+) -> dict[str, Any] | None:
+    for trans in transitions:
+        if _transition_dest_is_done(trans):
+            return trans
+    for trans in transitions:
+        name = (trans.get("name") or "").lower()
+        dest_id = str(((trans.get("to") or {}).get("id") or ""))
+        if name in HOP_TRANSITION_NAMES and dest_id not in visited_status_ids:
+            return trans
+    for trans in transitions:
+        dest_id = str(((trans.get("to") or {}).get("id") or ""))
+        if dest_id and dest_id not in visited_status_ids:
+            return trans
+    return None
+
+
+def transition_to_done(
+    *,
+    cloud_id: str,
+    auth_email: str,
+    token: str,
+    issue_key: str,
+) -> bool:
+    """Walk the JSM request workflow until status category Done.
+
+    SUP tickets in To Do often expose only Start / In review — not Done.
+    Re-list transitions after each hop. Already-Done tickets return True.
+    """
+    status, body = get_issue(
+        cloud_id=cloud_id,
+        auth_email=auth_email,
+        token=token,
+        issue_key=issue_key,
+        fields="status",
+    )
+    if status == 200 and _issue_is_done(body):
+        return True
+    visited: set[str] = set()
+    for _ in range(_MAX_DONE_HOPS):
+        http, transitions = list_transitions(
+            cloud_id=cloud_id,
+            auth_email=auth_email,
+            token=token,
+            issue_key=issue_key,
+        )
+        if http != 200:
+            return False
+        chosen = _pick_done_or_hop(transitions, visited)
+        if chosen is None:
+            status, body = get_issue(
+                cloud_id=cloud_id,
+                auth_email=auth_email,
+                token=token,
+                issue_key=issue_key,
+                fields="status",
+            )
+            return status == 200 and _issue_is_done(body)
+        dest_id = str(((chosen.get("to") or {}).get("id") or ""))
+        tid = str(chosen.get("id") or "")
+        if not tid:
+            return False
+        extra = {"resolution": {"name": "Done"}} if _transition_dest_is_done(chosen) else None
+        hop = transition_issue(
+            cloud_id=cloud_id,
+            auth_email=auth_email,
+            token=token,
+            issue_key=issue_key,
+            transition_id=tid,
+            fields=extra,
+        )
+        if hop not in (200, 204) and extra is not None:
+            hop = transition_issue(
+                cloud_id=cloud_id,
+                auth_email=auth_email,
+                token=token,
+                issue_key=issue_key,
+                transition_id=tid,
+            )
+        if hop not in (200, 204):
+            return False
+        if dest_id:
+            visited.add(dest_id)
+        if _transition_dest_is_done(chosen):
+            return True
+    return False
+
+
 def lookup_account_id(
     *,
     email: str,

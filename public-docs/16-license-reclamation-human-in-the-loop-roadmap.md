@@ -4,13 +4,14 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (15 Aug 2026):** Phase 0–3 are live in `us-west-1`. Phase 4 (Cursor skill + human-in-the-loop reclaim) is in progress this session — skill shipped; live test is [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira). Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (24 Aug 2026):** Phase 0–4 are live in `us-west-1`. Phase 4 HITL (Cursor skill) remains the production default. Phase 5 orchestrator Lambda is deployed with GPT-5.6 Luna via the OpenAI API (`gpt-5.6-luna`, secret `ohmgym-licenses/openai`); `enable_orchestrator` stays **false**. See [phase-5-autonomous-orchestrator.md](License%20Reclaimer/phase-5-autonomous-orchestrator.md). Figma is parked; Linear replaced it as the third v1 connector. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
 - [License Reclaimer/phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md)
 - [License Reclaimer/phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md)
 - [License Reclaimer/phase-4-human-in-the-loop.md](License%20Reclaimer/phase-4-human-in-the-loop.md)
+- [License Reclaimer/phase-5-autonomous-orchestrator.md](License%20Reclaimer/phase-5-autonomous-orchestrator.md)
 
 Companion to:
 
@@ -571,24 +572,64 @@ terraform/aws-license-reclaim/ (broker + write IAM)
 
 ---
 
-### Phase 5 — Observability, GRC, and selective auto-reclaim
+### Phase 5 — Observability, GRC, and dual-path (HITL default + optional agentic)
 
-**Objective:** Audit queries, dashboards, and optional `auto_reclaim: true` for lowest-risk apps.
+**Status:** Dual-path Terraform applied (24 Aug 2026) with `enable_orchestrator=false`. Live planner is GPT-5.6 Luna via the OpenAI API (`ohmgym-licenses/openai`). Log: [phase-5-autonomous-orchestrator.md](License%20Reclaimer/phase-5-autonomous-orchestrator.md). GRC/dashboard (P5-R1–R3) still out of this slice. HITL Cursor skill remains the happy path until `enable_orchestrator` is on.
+
+**Objective:** Keep Phase 4 human-in-the-loop as production default. Add an optional OpenAI GPT-5.6 Luna orchestrator behind a feature flag (auto after ticket) or a CLI (on-demand). Same broker. Do not fold reclaim into the offboarding Lambda (ADR-001). Leave `auto_reclaim: false` so the scanner still tickets and waits.
+
+Two **live** paths (plus CLI):
+
+| Mode | How it starts | Who decides |
+| --- | --- | --- |
+| **HITL (default)** | Ticket sits in JSM; operator runs the Cursor skill | Human confirm in chat |
+| **Agentic auto** | `enable_orchestrator = true` enables the EventBridge target on `license.scan.complete` | GPT-5.6 Luna + policy, then broker |
+| **Agentic CLI** | `scripts/licenses/orchestrate.py --issue SUP-n --dry-run\|--apply` | Same orchestrator Lambda; flag stays **off** |
+
+Broker idempotency (`already_reclaimed`) is the mutex. Luna `hold` leaves the ticket open; HITL still owns leftovers.
+
+```mermaid
+flowchart TD
+  ticket[JSM License Reclamation ticket]
+  flag{enable_orchestrator?}
+  hitl[HITL Cursor skill]
+  cli["CLI orchestrate.py"]
+  orch[Orchestrator Lambda]
+  openai[OpenAI GPT-5.6 Luna ReclaimPlan]
+  broker[Same reclaim broker]
+  done[JSM comment + Done or leave open]
+
+  ticket --> flag
+  flag -->|false default| hitl --> broker --> done
+  flag -->|true auto| orch
+  ticket --> cli
+  cli --> orch
+  orch --> openai --> broker --> done
+```
 
 | ID    | Requirement                                                                                                              |
 | ----- | ------------------------------------------------------------------------------------------------------------------------ |
-| P5-R1 | GRC read access to `ohmgym-license-reclaim-logs` (extend doc 12 pattern)                                                 |
-| P5-R2 | Dashboard card: open reclaim tickets / seats recovered this month                                                        |
-| P5-R3 | Weekly report script: ticketed vs reclaimed vs aged SLA                                                                  |
-| P5-R4 | Optional: for apps with `auto_reclaim: true`, broker runs without Cursor after ticket create (still writes Jira comment) |
-| P5-R5 | Stretch: Okta for AI Agents registration of scanner/broker NHIs (governance theater + revoke)                            |
-| P5-R6 | Stretch: agentic planner that emits `ReclaimPlan` JSON consumed by the same broker                                       |
+| P5-R1 | GRC read access to `ohmgym-license-reclaim-logs` (extend doc 12 pattern) — **not this slice**                             |
+| P5-R2 | Dashboard card: open reclaim tickets / seats recovered this month — **not this slice**                                   |
+| P5-R3 | Weekly report script: ticketed vs reclaimed vs aged SLA — **not this slice**                                             |
+| P5-R4 | Scanner emits `license.scan.complete` after ticketed/partial persist. EventBridge rule `ohmgym-license-reclaim-orchestrator-scan-complete` (source `ohmgym.licenses`, detail-type `license.scan.complete`); retries = 2; SQS DLQ. **Target enablement follows `enable_orchestrator` (default false)** — AWS provider 5.x has no per-target `is_enabled`, so the rule's `is_enabled` gates the target. Lambda is always deployed for CLI invoke. |
+| P5-R5 | Stretch: Okta for AI Agents registration of scanner/broker NHIs (governance theater + revoke) — **not this slice**       |
+| P5-R6 | Agentic planner: OpenAI GPT-5.6 Luna (`gpt-5.6-luna`) emits `ReclaimPlan` JSON; policy intersect; POST the **same** broker. IAM allows `secretsmanager:GetSecretValue` on `ohmgym-licenses/openai`. Env: `OPENAI_MODEL_ID`, `OPENAI_SECRET_NAME`, Responses API `/v1/responses`, `max_output_tokens` 2048, `ORCHESTRATOR_AUTO_RUN` tied to the flag. Human gate remains the happy path until the flag is on. |
+
+**Feature flag**
+
+- Terraform variable `enable_orchestrator` **default `false`**.
+- When `false`: orchestrator Lambda exists (CLI `--invoke`); EventBridge rule disabled; nothing consumes `license.scan.complete`.
+- When `true`: same Lambda; EventBridge target on. Post-ticket runs go agentic automatically. Skill remains the hold / leftover path.
+- Optional runtime env `ORCHESTRATOR_AUTO_RUN` mirrors the flag.
+- Flip for a demo: `terraform apply -var='enable_orchestrator=true'`. CLI does **not** require the flag.
 
 **Exit criteria:**
 
-- [ ] GRC can query reclaim outcomes by date without IT-Ops credentials
-- [ ] At least one app can demo auto-reclaim behind a feature flag
-- [ ] Interview demo script under 10 minutes
+- [ ] GRC can query reclaim outcomes by date without IT-Ops credentials (P5-R1)
+- [x] Terraform encodes dual-path: HITL default; agentic via `enable_orchestrator` or CLI (P5-R4, P5-R6 infra) — apply still operator-gated
+- [ ] At least one app can demo auto-reclaim behind the feature flag (handler + apply)
+- [ ] Interview demo script under 10 minutes (HITL first, then CLI with flag off)
 
 ---
 
@@ -642,7 +683,8 @@ Phases 0 and 1 are **done** and ran in parallel. Phase 2 needs both. Phase 4 mus
 | **App catalog**      | `config/licenses/apps.json`                  | Allowlist + secret names         |
 | **Scanner**          | `lambdas/license_scanner` + Terraform        | Inventory + ticket create        |
 | **Broker**           | `lambdas/license_reclaim_broker` + Terraform | Revoke API                       |
-| **Copilot**          | Cursor/Claude skill                          | Human-in-the-loop orchestration  |
+| **Copilot**          | Cursor/Claude skill                          | Human-in-the-loop orchestration (default) |
+| **Orchestrator**     | `lambdas/license_reclaim_orchestrator` + Terraform | Optional GPT-5.6 Luna planner; same broker; flag/CLI |
 | **Audit**            | DynamoDB + dashboard                         | Findings + outcomes              |
 
 ---
@@ -675,11 +717,14 @@ scripts/
     linear_client.py
     jira_client.py
     reclaim.py
+    orchestrate.py
     scan_cli.py
 lambdas/
   license_scanner/
     handler.py
   license_reclaim_broker/
+    handler.py
+  license_reclaim_orchestrator/
     handler.py
 terraform/
   aws-license-reclaim/
@@ -690,6 +735,7 @@ public-docs/
   License Reclaimer/phase-2-license-scanner.md
   License Reclaimer/phase-3-reclaim-broker.md
   License Reclaimer/phase-4-human-in-the-loop.md
+  License Reclaimer/phase-5-autonomous-orchestrator.md
 ```
 
 ---
@@ -741,3 +787,4 @@ Maps to JD themes: offboarding automation, API-driven SaaS integrations, ITSM (J
 | [Phase 2 log](License%20Reclaimer/phase-2-license-scanner.md) | Scanner Lambda live in `us-west-1`; error contract; seed matrix; apply notes |
 | [Phase 3 log](License%20Reclaimer/phase-3-reclaim-broker.md) | Reclaim broker live; Jira write-path decision; broker API + CLI contract |
 | [Phase 4 log](License%20Reclaimer/phase-4-human-in-the-loop.md) | Cursor skill; SUP-3 human-in-the-loop reclaim |
+| [Phase 5 log](License%20Reclaimer/phase-5-autonomous-orchestrator.md) | Dual-path orchestrator Terraform; HITL default vs `enable_orchestrator` / CLI |

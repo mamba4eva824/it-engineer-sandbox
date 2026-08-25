@@ -7,3 +7,12 @@ slack_bot_token_secret_arn = "arn:aws:secretsmanager:us-west-1:ACCOUNT:secret:oh
 
 jira_email  = "buffett.dev117@gmail.com"
 alarm_email = "ops@example.com"
+
+# Dual-path flag (default false). HITL Cursor skill stays the 5pm path.
+# true = EventBridge target on license.scan.complete fires the orchestrator.
+# Lambda is always deployed; CLI invoke does not need this flag.
+# enable_orchestrator = false
+#
+# Live planner: GPT-5.6 Luna via OpenAI API (secret ohmgym-licenses/openai).
+# openai_model_id    = "gpt-5.6-luna"
+# openai_secret_name = "ohmgym-licenses/openai"

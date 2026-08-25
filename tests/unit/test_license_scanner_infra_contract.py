@@ -102,3 +102,30 @@ def test_license_reclaim_stack_defaults_to_us_west_1() -> None:
     handler = SCANNER_HANDLER.read_text()
     assert 'os.environ.get("SECRETS_REGION", "us-west-1")' in handler
     assert 'os.environ.get("SECRETS_REGION", "us-east-1")' not in handler
+
+
+def test_scanner_can_put_events_for_orchestrator_trigger() -> None:
+    iam = _read("iam.tf")
+    assert "events:PutEvents" in iam
+    assert "event-bus/default" in iam
+    assert 'name   = "${var.name_prefix}-events"' in iam
+    handler = SCANNER_HANDLER.read_text()
+    assert "ohmgym.licenses" in handler
+    assert "license.scan.complete" in handler
+    eventbridge = _read("eventbridge.tf")
+    assert "license.scan.complete" in eventbridge
+    assert "ohmgym-license-reclaim-orchestrator" in eventbridge
+    assert "is_enabled  = var.enable_orchestrator" in eventbridge
+
+
+def test_orchestrator_defaults_to_openai_gpt56_luna() -> None:
+    variables = _read("variables.tf")
+    iam = _read("orchestrator_iam.tf")
+    lambda_tf = _read("orchestrator_lambda.tf")
+    assert 'default     = "gpt-5.6-luna"' in variables
+    assert 'default     = "ohmgym-licenses/openai"' in variables
+    assert "bedrock:InvokeModel" not in iam
+    assert "bedrock:Converse" not in iam
+    assert "us.anthropic.claude-haiku-4-5-20251001-v1:0" not in lambda_tf
+    assert "OPENAI_MODEL_ID             = var.openai_model_id" in lambda_tf
+    assert "data.aws_secretsmanager_secret.openai.arn" in iam

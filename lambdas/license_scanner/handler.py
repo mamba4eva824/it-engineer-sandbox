@@ -8,8 +8,9 @@ Error handling is a first-class contract (ADR-010 / ADR-011):
   3. Scan enabled apps independently (one exception cannot skip the others).
   4. Always PutItem findings (best-effort persist before any raise).
   5. Ticket when any enabled app is active OR error; reuse existing issue.
-  6. Slack #leaver-it-ops on every run; Slack failure does not raise.
-  7. Raise only on infra, JSM create failure after persist, or all connectors failed.
+  6. After a ticketed/partial persist, PutEvents license.scan.complete (skip clean).
+  7. Slack #leaver-it-ops on every run; Slack failure does not raise.
+  8. Raise only on infra, JSM create failure after persist, or all connectors failed.
 
 dry_run: run connectors and return the plan; skip JSM, DynamoDB, and Slack.
 
@@ -75,6 +76,10 @@ CF_NOTES = "customfield_10142"
 _secrets_client = boto3.client("secretsmanager", region_name=SECRETS_REGION)
 _dynamodb = boto3.resource("dynamodb", region_name=SECRETS_REGION)
 _table = _dynamodb.Table(DYNAMODB_TABLE_NAME)
+_events = boto3.client("events", region_name=SECRETS_REGION)
+
+LICENSE_SCAN_COMPLETE_SOURCE = "ohmgym.licenses"
+LICENSE_SCAN_COMPLETE_DETAIL_TYPE = "license.scan.complete"
 
 
 def _fetch_secret(name: str) -> str:
@@ -288,6 +293,47 @@ def _get_existing(run_date: str, user_id: str) -> dict[str, Any] | None:
         ConsistentRead=True,
     )
     return resp.get("Item")
+
+
+def should_emit_scan_complete(status: str, issue_key: str | None) -> bool:
+    """Emit only after a ticketed/partial row with a JSM key. Skip clean."""
+    if not (issue_key or "").strip():
+        return False
+    if status in (NO_LICENSES_TO_RECLAIM, "clean"):
+        return False
+    return status in ("ticketed", "partial")
+
+
+def _emit_license_scan_complete(
+    *,
+    issue_key: str,
+    payload: dict[str, str],
+    status: str,
+    findings: list[dict[str, Any]],
+) -> None:
+    """Publish license.scan.complete for the orchestrator. Raises on failed entries."""
+    okta_id = payload["okta_id"]
+    detail = {
+        "issue_key": issue_key,
+        "run_date": payload["run_date"],
+        "user_id": okta_id,
+        "okta_id": okta_id,
+        "login": payload["user_email"],
+        "run_id": payload["run_id"],
+        "status": status,
+        "apps": findings,
+    }
+    resp = _events.put_events(
+        Entries=[{
+            "Source": LICENSE_SCAN_COMPLETE_SOURCE,
+            "DetailType": LICENSE_SCAN_COMPLETE_DETAIL_TYPE,
+            "Detail": json.dumps(detail),
+        }]
+    )
+    if resp.get("FailedEntryCount", 0):
+        entries = resp.get("Entries") or []
+        reason = entries[0].get("ErrorMessage", "put_events failed") if entries else "put_events failed"
+        raise RuntimeError(reason[:500])
 
 
 def persist_findings(item: dict[str, Any]) -> None:
@@ -653,6 +699,26 @@ def lambda_handler(event, context):  # noqa: ARG001
         result["error_class"] = error_class
         _log(result)
         raise RuntimeError(f"license_scan_failed:{error_class}")
+
+    if should_emit_scan_complete(row_status, issue_key):
+        try:
+            _emit_license_scan_complete(
+                issue_key=str(issue_key),
+                payload=payload,
+                status=row_status,
+                findings=findings,
+            )
+        except Exception as exc:
+            _log({
+                "event": "license_scan_complete_emit_failed",
+                "okta_id": payload["okta_id"],
+                "login": payload["user_email"],
+                "run_id": payload["run_id"],
+                "run_date": payload["run_date"],
+                "jira_issue_key": issue_key,
+                "correlation_id": correlation_id,
+                "error": str(exc)[:500],
+            })
 
     _log(result)
     return result

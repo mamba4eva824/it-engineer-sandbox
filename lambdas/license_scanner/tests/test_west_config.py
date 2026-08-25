@@ -10,3 +10,7 @@ def test_secrets_region_is_us_west_1() -> None:
 
 def test_dynamodb_client_region_matches_secrets() -> None:
     assert handler._dynamodb.meta.client.meta.region_name == "us-west-1"
+
+
+def test_events_client_region_matches_secrets() -> None:
+    assert handler._events.meta.region_name == "us-west-1"

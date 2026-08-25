@@ -7,6 +7,8 @@ description: Reclaims non-SCIM SaaS seats for a JSM License Reclamation ticket b
 
 IT-Ops copilot for JSM **License Reclamation** tickets. Read the ticket, call the **broker** (the only SaaS write path), comment results, transition Done. Never call GitHub / Linear / Jira admin APIs with write tokens. Never `UpdateItem` DynamoDB.
 
+Human-in-the-loop is the production default (`enable_orchestrator` is false). If DynamoDB `reclaim[]` is already complete, or a `planner` map shows those apps were already applied, do not re-apply. If `planner` exists but apps remain `hold`, continue this HITL flow on the remainder.
+
 Roadmap: `public-docs/16-license-reclamation-human-in-the-loop-roadmap.md`. Broker CLI: `scripts/licenses/reclaim.py`. Fields: `config/jira/field-mapping.json`. Allowlist: `config/licenses/apps.json`.
 
 ## Constants

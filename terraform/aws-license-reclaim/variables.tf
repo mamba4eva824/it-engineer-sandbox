@@ -128,3 +128,47 @@ variable "broker_lambda_timeout_seconds" {
   type        = number
   default     = 90
 }
+
+# --- Phase 5: Autonomous orchestrator (HITL remains default) ---
+
+variable "enable_orchestrator" {
+  description = "When true, enable the EventBridge target on license.scan.complete (agentic auto after ticket). Default false keeps HITL as the 5pm path. Orchestrator Lambda is always deployed so CLI can invoke it."
+  type        = bool
+  default     = false
+}
+
+variable "orchestrator_name_prefix" {
+  description = "Prefix applied to every orchestrator resource name (lambda, log group, IAM, alarm, DLQ)."
+  type        = string
+  default     = "ohmgym-license-reclaim-orchestrator"
+}
+
+variable "orchestrator_lambda_timeout_seconds" {
+  description = "Orchestrator Lambda timeout in seconds. Covers OpenAI planner + broker POST + Jira comment."
+  type        = number
+  default     = 120
+}
+
+variable "openai_secret_name" {
+  description = "Secrets Manager name holding the OpenAI API key (raw sk-... or JSON with api_key). Not created by this stack."
+  type        = string
+  default     = "ohmgym-licenses/openai"
+}
+
+variable "openai_model_id" {
+  description = "OpenAI API model id for the orchestrator planner (GPT-5.6 Luna)."
+  type        = string
+  default     = "gpt-5.6-luna"
+}
+
+variable "openai_base_url" {
+  description = "OpenAI API base URL (Responses API at /responses)."
+  type        = string
+  default     = "https://api.openai.com/v1"
+}
+
+variable "openai_max_tokens" {
+  description = "max_output_tokens for the OpenAI Responses planner call, including reasoning tokens."
+  type        = number
+  default     = 2048
+}

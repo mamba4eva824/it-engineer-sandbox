@@ -61,3 +61,33 @@ output "broker_webhook_secret_name" {
   value       = aws_secretsmanager_secret.broker_webhook.name
   description = "Put a random shared-secret value here after apply (e.g. `openssl rand -hex 32`); reclaim.py --invoke sends it as the Authorization header."
 }
+
+output "orchestrator_function_name" {
+  value       = aws_lambda_function.license_reclaim_orchestrator.function_name
+  description = "Orchestrator Lambda name for aws lambda invoke / orchestrate.py. Deployed even when enable_orchestrator is false."
+}
+
+output "orchestrator_function_arn" {
+  value = aws_lambda_function.license_reclaim_orchestrator.arn
+}
+
+output "orchestrator_log_group_name" {
+  value = aws_cloudwatch_log_group.orchestrator.name
+}
+
+output "orchestrator_role_arn" {
+  value = aws_iam_role.orchestrator_exec.arn
+}
+
+output "orchestrator_dlq_url" {
+  value = aws_sqs_queue.orchestrator_dlq.id
+}
+
+output "orchestrator_event_rule_arn" {
+  value = aws_cloudwatch_event_rule.orchestrator_scan_complete.arn
+}
+
+output "orchestrator_event_rule_enabled" {
+  value       = var.enable_orchestrator
+  description = "Whether the license.scan.complete EventBridge target is enabled. Default false (HITL)."
+}

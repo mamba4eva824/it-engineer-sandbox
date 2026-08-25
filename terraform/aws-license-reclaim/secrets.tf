@@ -17,8 +17,6 @@ locals {
     "github-write",
     "linear-write",
     "jira-write",
-    "figma-read",
-    "figma-write",
   ]
 }
 

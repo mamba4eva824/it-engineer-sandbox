@@ -3,6 +3,8 @@
 # One row per (run_date, user_id). Scanner does GetItem + PutItem only.
 # Phase 3 broker adds Query (via the jira_issue_key GSI below) + UpdateItem
 # on its own dedicated role (broker_iam.tf) — the scanner role is untouched.
+# Phase 5 orchestrator Query on the same GSI + UpdateItem restricted to the
+# `planner` map only (orchestrator_iam.tf). Broker still owns reclaim[] / status.
 # PAY_PER_REQUEST matches the offboarding logs table. TTL on ttl_epoch
 # (90 days).
 #

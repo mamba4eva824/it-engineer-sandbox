@@ -386,3 +386,122 @@ def test_ddb_failure_raises_infra(_persist, empty_table):
         _mock_slack(rm)
         with pytest.raises(RuntimeError, match="infra"):
             handler.lambda_handler(_event(), None)
+
+
+def test_should_emit_scan_complete_skips_clean():
+    assert handler.should_emit_scan_complete("ticketed", "SUP-42") is True
+    assert handler.should_emit_scan_complete("partial", "SUP-11") is True
+    assert handler.should_emit_scan_complete("No Licenses to Reclaim", None) is False
+    assert handler.should_emit_scan_complete("No Licenses to Reclaim", "SUP-1") is False
+    assert handler.should_emit_scan_complete("clean", "SUP-1") is False
+    assert handler.should_emit_scan_complete("ticketed", None) is False
+    assert handler.should_emit_scan_complete("ticketed", "") is False
+    assert handler.should_emit_scan_complete("error", "SUP-8") is False
+
+
+def test_ticketed_emits_license_scan_complete(empty_table):
+    captured: list[dict] = []
+
+    def _put_events(Entries):  # noqa: N803
+        captured.extend(Entries)
+        return {"FailedEntryCount": 0, "Entries": [{"EventId": "evt-scan-1"}]}
+
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 204)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-42")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events", side_effect=_put_events):
+            result = handler.lambda_handler(_event(), None)
+    assert result["status"] == "ticketed"
+    assert result["jira_issue_key"] == "SUP-42"
+    assert len(captured) == 1
+    assert captured[0]["Source"] == "ohmgym.licenses"
+    assert captured[0]["DetailType"] == "license.scan.complete"
+    detail = json.loads(captured[0]["Detail"])
+    assert detail["issue_key"] == "SUP-42"
+    assert detail["run_date"] == RUN_DATE
+    assert detail["user_id"] == OKTA_ID
+    assert detail["okta_id"] == OKTA_ID
+    assert detail["login"] == EMAIL
+    assert detail["run_id"] == RUN_ID
+    assert detail["status"] == "ticketed"
+    assert isinstance(detail["apps"], list)
+    assert any(a.get("app") == "github" and a.get("status") == "active" for a in detail["apps"])
+
+
+def test_partial_emits_license_scan_complete(empty_table):
+    captured: list[dict] = []
+
+    def _put_events(Entries):  # noqa: N803
+        captured.extend(Entries)
+        return {"FailedEntryCount": 0, "Entries": [{"EventId": "evt-scan-2"}]}
+
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 204)
+        rm.post("https://api.linear.app/graphql", exc=requests.exceptions.Timeout)
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-11")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events", side_effect=_put_events):
+            result = handler.lambda_handler(_event(), None)
+    assert result["status"] == "partial"
+    assert result["jira_issue_key"] == "SUP-11"
+    assert len(captured) == 1
+    assert captured[0]["Source"] == "ohmgym.licenses"
+    assert captured[0]["DetailType"] == "license.scan.complete"
+    detail = json.loads(captured[0]["Detail"])
+    assert detail["issue_key"] == "SUP-11"
+    assert detail["status"] == "partial"
+    assert detail["user_id"] == OKTA_ID
+    assert detail["okta_id"] == OKTA_ID
+
+
+def test_clean_does_not_emit_license_scan_complete(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 404)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events") as put_events:
+            result = handler.lambda_handler(_event(), None)
+    assert result["status"] == "No Licenses to Reclaim"
+    put_events.assert_not_called()
+
+
+def test_dry_run_does_not_emit_license_scan_complete(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 204)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        with patch.object(handler._events, "put_events") as put_events:
+            result = handler.lambda_handler(_event(dry_run=True), None)
+    assert result["dry_run"] is True
+    put_events.assert_not_called()
+
+
+def test_put_events_failure_does_not_raise_after_ticket(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 204)
+        _mock_linear_absent(rm)
+        _mock_jira_not_member(rm)
+        _mock_jira_create(rm, key="SUP-42")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events", side_effect=RuntimeError("bus unavailable")):
+            result = handler.lambda_handler(_event(), None)
+    assert result["status"] == "ticketed"
+    assert result["jira_issue_key"] == "SUP-42"
+
+
+def test_all_connectors_failed_does_not_emit(empty_table):
+    with requests_mock.Mocker() as rm:
+        _mock_github(rm, 500)
+        rm.post("https://api.linear.app/graphql", exc=requests.exceptions.Timeout)
+        rm.get(USER_SEARCH, status_code=503, text="unavailable")
+        _mock_jira_create(rm, key="SUP-8")
+        _mock_slack(rm)
+        with patch.object(handler._events, "put_events") as put_events:
+            with pytest.raises(RuntimeError, match="all_connectors_failed"):
+                handler.lambda_handler(_event(), None)
+    put_events.assert_not_called()

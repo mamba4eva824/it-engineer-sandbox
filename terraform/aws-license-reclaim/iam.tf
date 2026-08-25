@@ -73,3 +73,23 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
   role   = aws_iam_role.lambda_exec.id
   policy = data.aws_iam_policy_document.lambda_dynamodb.json
 }
+
+# EventBridge PutEvents — license.scan.complete on the default bus for the orchestrator.
+# Target wiring lives with the orchestrator stack; this role only publishes.
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "lambda_events" {
+  statement {
+    effect  = "Allow"
+    actions = ["events:PutEvents"]
+    resources = [
+      "arn:aws:events:${var.aws_region}:${data.aws_caller_identity.current.account_id}:event-bus/default",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_events" {
+  name   = "${var.name_prefix}-events"
+  role   = aws_iam_role.lambda_exec.id
+  policy = data.aws_iam_policy_document.lambda_events.json
+}

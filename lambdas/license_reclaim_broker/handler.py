@@ -32,7 +32,10 @@ Handler flow (mirrors the scanner's per-app continue-on-error style, ADR-010):
      succeeded), `No Licenses to Reclaim` (no scan-`active` seats), or
      `partial`.
   7. Best-effort Jira comment summarizing outcomes — failure is logged, never
-     raises (mirrors the scanner's Slack-is-best-effort contract).
+     raises (mirrors the scanner's Slack-is-best-effort contract). After a
+     live reclaim where every eligible app succeeded, walk the JSM workflow
+     to Done (Start → Resolved). Dry-run and hold/skip-only runs stay open.
+     SUP-2 is never transitioned.
 
 Write secrets (github-write, linear-write, jira-write) are fetched lazily,
 only inside a live (non-dry-run) reclaim, and only for the app being revoked
@@ -55,7 +58,7 @@ if _SCRIPTS_LICENSES.is_dir():
     sys.path.insert(0, str(_SCRIPTS_LICENSES))
 
 from github_client import remove_org_member  # noqa: E402
-from jira_client import add_comment, deactivate_user, product_access_groups, remove_product_access  # noqa: E402
+from jira_client import add_comment, deactivate_user, product_access_groups, remove_product_access, transition_to_done  # noqa: E402
 from linear_client import DEFAULT_ORG_UUID, suspend_user  # noqa: E402
 from row_status import compute_reclaim_row_status  # noqa: E402
 
@@ -71,6 +74,7 @@ JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
 LINEAR_ORG_UUID = os.environ.get("LINEAR_ORG_UUID", DEFAULT_ORG_UUID)
 DYNAMODB_TABLE_NAME = os.environ["DYNAMODB_TABLE_NAME"]
 DYNAMODB_ISSUE_KEY_INDEX = os.environ.get("DYNAMODB_ISSUE_KEY_INDEX", "jira_issue_key-index")
+FIXTURE_ISSUE_KEY = "SUP-2"
 
 _secrets_client = boto3.client("secretsmanager", region_name=SECRETS_REGION)
 _dynamodb = boto3.resource("dynamodb", region_name=SECRETS_REGION)
@@ -297,6 +301,36 @@ def update_reclaim(row: dict[str, Any], results: list[dict[str, Any]], requested
     return new_status
 
 
+
+def _app_reclaim_succeeded(result: dict[str, Any]) -> bool:
+    status = str(result.get("status") or result.get("outcome") or "").lower()
+    return status in ("reclaimed", "already_reclaimed")
+
+
+def maybe_transition_ticket_done(issue_key: str, *, eligible: set[str], results: list[dict[str, Any]]) -> bool:
+    """Done when this live apply actually cleared the requested reclaimable seats."""
+    if issue_key == FIXTURE_ISSUE_KEY:
+        return False
+    if not eligible:
+        return False
+    by_app = {str(r.get("app")): r for r in results}
+    if not all(_app_reclaim_succeeded(by_app.get(app, {})) for app in eligible):
+        return False
+    try:
+        token = _fetch_secret(JIRA_WRITE_SECRET_NAME)
+        ok = transition_to_done(
+            cloud_id=JIRA_CLOUD_ID,
+            auth_email=JIRA_EMAIL,
+            token=token,
+            issue_key=issue_key,
+        )
+    except Exception as exc:
+        _log({"event": "broker_transition_failed", "issue_key": issue_key, "error": str(exc)[:500]})
+        return False
+    if not ok:
+        _log({"event": "broker_transition_failed", "issue_key": issue_key, "error": "could not reach Done"})
+    return ok
+
 def post_jira_comment(issue_key: str, results: list[dict[str, Any]]) -> None:
     try:
         read_token = _fetch_secret(JIRA_READ_SECRET_NAME)
@@ -372,9 +406,11 @@ def lambda_handler(event, context):  # noqa: ARG001
         results.append({**outcome, "app": p["app"], "requested_by": req["requested_by"], "at": _now_iso()})
 
     new_status = None
+    done = False
     if eligible:
         new_status = update_reclaim(row, [r for r in results if r["app"] in eligible], req["requested_by"])
         post_jira_comment(req["issue_key"], results)
+        done = maybe_transition_ticket_done(req["issue_key"], eligible=eligible, results=results)
 
     response = {
         "event": "license_reclaim_complete",
@@ -383,6 +419,7 @@ def lambda_handler(event, context):  # noqa: ARG001
         "requested_by": req["requested_by"],
         "row_status": new_status,
         "results": results,
+        "done": done,
     }
     _log(response)
     return _http_response(200, response)

@@ -227,3 +227,88 @@ def test_jira_tries_remove_product_access_then_deactivate_user(lambda_url_event,
         "f757c432-6ca9-41a9-b956-e4b9396a1cf9",
         "1057bb4d-3c22-4e72-898f-d99cbdea8c97",
     }
+
+
+def test_live_apply_marks_done_when_reclaim_succeeds(lambda_url_event, table):
+    from conftest import GATEWAY, TEST_ORG, make_row
+
+    row = make_row(issue_key="SUP-10", apps=[{"app": "github", "status": "active"}])
+    table.put_item(Item=row)
+    issue_url = f"{GATEWAY}/rest/api/3/issue/SUP-10"
+    start = {
+        "id": "81",
+        "name": "Start",
+        "to": {"id": "3", "name": "In Progress", "statusCategory": {"key": "indeterminate"}},
+    }
+    resolved = {
+        "id": "121",
+        "name": "Resolved",
+        "to": {"id": "10082", "name": "Done", "statusCategory": {"key": "done"}},
+    }
+    with requests_mock.Mocker() as rm:
+        rm.delete(f"https://api.github.com/orgs/{TEST_ORG}/memberships/marcusreyes", status_code=204)
+        rm.get(issue_url, json={"fields": {"status": {"name": "To Do", "statusCategory": {"key": "new"}}}})
+        rm.get(f"{issue_url}/transitions", [
+            {"json": {"transitions": [start]}},
+            {"json": {"transitions": [resolved]}},
+        ])
+        rm.post(f"{issue_url}/transitions", status_code=204)
+        rm.post(f"{issue_url}/comment", json={"id": "c1"}, status_code=201)
+        event = lambda_url_event(body={"issue_key": "SUP-10", "apps": ["github"], "dry_run": False})
+        resp = handler.lambda_handler(event, None)
+    body = json.loads(resp["body"])
+    assert body["done"] is True
+    posts = [h for h in rm.request_history if h.method == "POST" and h.url.rstrip("/").endswith("/transitions")]
+    assert [h.json()["transition"]["id"] for h in posts] == ["81", "121"]
+
+
+def test_dry_run_does_not_mark_done(lambda_url_event, table):
+    from conftest import make_row
+
+    row = make_row(issue_key="SUP-10", apps=[{"app": "github", "status": "active"}])
+    table.put_item(Item=row)
+    with requests_mock.Mocker() as rm:
+        event = lambda_url_event(body={"issue_key": "SUP-10", "apps": ["github"], "dry_run": True})
+        resp = handler.lambda_handler(event, None)
+    body = json.loads(resp["body"])
+    assert body["dry_run"] is True
+    assert "done" not in body or body.get("done") is not True
+    assert rm.request_history == []
+
+
+def test_partial_failure_does_not_mark_done(lambda_url_event, table):
+    from conftest import GATEWAY, TEST_ORG, make_row
+
+    row = make_row(
+        issue_key="SUP-10",
+        apps=[
+            {"app": "github", "status": "active"},
+            {"app": "linear", "status": "active"},
+        ],
+    )
+    table.put_item(Item=row)
+    with requests_mock.Mocker() as rm:
+        rm.delete(f"https://api.github.com/orgs/{TEST_ORG}/memberships/marcusreyes", status_code=204)
+        rm.post("https://api.linear.app/graphql", exc=__import__("requests").exceptions.Timeout)
+        event = lambda_url_event(body={"issue_key": "SUP-10", "apps": ["github", "linear"], "dry_run": False})
+        resp = handler.lambda_handler(event, None)
+    body = json.loads(resp["body"])
+    assert body.get("done") is not True
+    trans = [h for h in rm.request_history if h.url.rstrip("/").endswith("/transitions")]
+    assert trans == []
+
+
+def test_fixture_sup_2_live_does_not_mark_done(lambda_url_event, table):
+    from conftest import TEST_ORG, make_row
+
+    row = make_row(issue_key="SUP-2", apps=[{"app": "github", "status": "active"}])
+    table.put_item(Item=row)
+    with requests_mock.Mocker() as rm:
+        rm.delete(f"https://api.github.com/orgs/{TEST_ORG}/memberships/marcusreyes", status_code=204)
+        event = lambda_url_event(body={"issue_key": "SUP-2", "apps": ["github"], "dry_run": False})
+        resp = handler.lambda_handler(event, None)
+    body = json.loads(resp["body"])
+    assert body["results"][0]["status"] == "reclaimed"
+    assert body.get("done") is not True
+    trans = [h for h in rm.request_history if "transitions" in h.url]
+    assert trans == []
