@@ -27,7 +27,7 @@ This project builds a series of interconnected sandbox environments that replica
 - Google Cloud Identity Free on `ohmgym.com` (active; SAML federation currently via Auth0, to be re-pointed to Okta in Phase 1.4)
 - Domain: `ohmgym.com` (verified for Cloud Identity)
 
-**Phase 1 note:** the original Auth0-centric Phase 1 below is retained for historical reference. The Okta migration is tracked in `okta_workato_zendesk_slack.md`; the current focus is the Okta RBAC foundation (profile attributes + department groups + group rules) via `scripts/okta/reconcile_config.py`. Phase 2-3 downstream work (GWS, Slack) resumes once Okta RBAC is stable.
+**Phase 1 note:** the original Auth0-centric Phase 1 below is retained for historical reference. The Okta migration is tracked in `okta_workato_zendesk_slack.md`. Okta RBAC, GWS, and Slack SCIM have since shipped. Current focus is non-SCIM license reclamation during offboarding: a scanner inventories GitHub, Linear, and Jira after Okta deactivation, a JSM ticket queues the work, and a Cursor skill reclaims seats only after a human confirms. The broker Lambda is the only write path. See `public-docs/16-license-reclamation-human-in-the-loop-roadmap.md` and `README.md`.
 
 ### Total Timeline
 10 weeks at 1-2 hours per day, or 5 weeks at 3-4 hours per day

@@ -5,7 +5,9 @@ Deterministic scan after Okta deactivate: GitHub / Linear / Jira membership → 
 Roadmap: [16-license-reclamation-human-in-the-loop-roadmap.md](../16-license-reclamation-human-in-the-loop-roadmap.md). Prior logs: [phase-0-trials-and-credentials.md](phase-0-trials-and-credentials.md), [phase-1-jsm-foundation.md](phase-1-jsm-foundation.md).
 
 **Date:** 14 Aug 2026  
-**Status:** Live in account `882248517627` / `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` schema applied. Offboarding `leaver.completed` emit patched in-place (no Terraform state for `aws-offboarding` in this worktree). Dashboard (P2-R10) deferred. First scheduled batch armed for 17:00 America/Los_Angeles 14 Aug 2026; live JSM create from this Lambda is not yet observed.
+**Status:** Live in account `882248517627` / `us-west-1`. Scanner stack applied; read secrets promoted; Okta `githubUsername` schema applied. Offboarding `leaver.completed` emit patched in-place (no Terraform state for `aws-offboarding` in this worktree). Dashboard (P2-R10) deferred.
+
+**Update (15 Aug 2026):** The 14 Aug batch did open JSM License Reclamation tickets. [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira) was reclaimed through the Phase 4 skill. See [phase-4-human-in-the-loop.md](phase-4-human-in-the-loop.md).
 
 ---
 

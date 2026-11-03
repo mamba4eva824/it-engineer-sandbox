@@ -5,7 +5,9 @@ Allowlisted, deterministic revoke API: `POST /v1/licenses/reclaim` on a Lambda F
 Roadmap: [16-license-reclamation-human-in-the-loop-roadmap.md](../16-license-reclamation-human-in-the-loop-roadmap.md). Prior logs: [phase-0-trials-and-credentials.md](phase-0-trials-and-credentials.md), [phase-1-jsm-foundation.md](phase-1-jsm-foundation.md), [phase-2-license-scanner.md](phase-2-license-scanner.md).
 
 **Date:** 14 Aug 2026
-**Status:** Applied and live in `us-west-1` (account `882248517627`). `terraform apply` ran 14 Aug ~11:07pm UTC (11 resources added, 2 changed, 0 destroyed) under profile `novatech-sandbox`. Broker Lambda, Function URL, GSI, and alarm are all healthy. Write secrets not yet promoted with real values and no live reclaim has been executed — see [Live apply](#live-apply--applied-secrets-not-yet-promoted).
+**Status:** Applied and live in `us-west-1` (account `882248517627`). `terraform apply` ran 14 Aug ~11:07pm UTC (11 resources added, 2 changed, 0 destroyed) under profile `novatech-sandbox`. Broker Lambda, Function URL, GSI, and alarm are all healthy.
+
+**Update (15 Aug 2026):** Write secrets were promoted and a live reclaim ran. [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) removed Erin Patel from GitHub and from `jira-users-buffett-dev` via `--invoke --apply`. Row `status=reclaimed`. The Cursor skill, not a local connector `--apply`, is the operator path. See [phase-4-human-in-the-loop.md](phase-4-human-in-the-loop.md). The 14 Aug "secrets not yet promoted" section below is the build-day log.
 
 ---
 
@@ -67,7 +69,7 @@ Write secrets are fetched lazily, only inside a live request, only for the app b
 
 ## CLI usage (natural-language via Cursor today)
 
-`scripts/licenses/reclaim.py` is what a service-desk agent runs — a formal Cursor/Claude skill file is Phase 4, but the CLI's flags are explicit enough that Cursor can already translate a prompt like *"reclaim GitHub and Linear for SUP-2, dry-run first"* into the right command today.
+`scripts/licenses/reclaim.py` is what a service-desk agent runs. The Cursor skill now wraps this CLI: [`.cursor/skills/reclaim-licenses/SKILL.md`](../../.cursor/skills/reclaim-licenses/SKILL.md) (Phase 4). It uses `--invoke` only, dry-runs first, and waits for a human confirm before `--apply`. Do not point a demo at fixture ticket `SUP-2`.
 
 ```bash
 # Local dry-run: query DynamoDB directly, print the plan. No writes anywhere.

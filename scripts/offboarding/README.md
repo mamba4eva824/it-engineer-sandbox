@@ -2,6 +2,8 @@
 
 Local-laptop tooling for the AWS → Okta → Slack scheduled offboarding workflow. The Lambda runs autonomously in us-west-1 (triggered by EventBridge Scheduler at 5:00 PM PT daily). These scripts exist for development, demos, and operator remediation.
 
+A successful deactivate also emits `leaver.completed`. That event starts the license scanner (`ohmgym-license-scanner`), which opens a JSM License Reclamation ticket for leftover GitHub, Linear, or Jira seats. Reclaim is a separate step: the Cursor skill `.cursor/skills/reclaim-licenses/SKILL.md` calls `scripts/licenses/reclaim.py --invoke` and waits for a human confirm before `--apply`. This folder does not revoke those seats.
+
 | Script | Purpose | When to use |
 |---|---|---|
 | `set_end_date.py` | Set `profile.endDate` on user(s) by login, user id, or full name | Before manual invoke or scheduler run |
@@ -59,8 +61,10 @@ All scripts honor the project `.env` for Okta credentials (Private Key JWT) and 
 
 ## Companion docs
 
-- [`public-docs/11-aws-scheduled-offboarding-workflow.md`](../../public-docs/11-aws-scheduled-offboarding-workflow.md) — architecture + runbook (when present)
+- [`public-docs/11-aws-scheduled-offboarding-workflow.md`](../../public-docs/11-aws-scheduled-offboarding-workflow.md) — architecture + runbook
+- [`public-docs/16-license-reclamation-human-in-the-loop-roadmap.md`](../../public-docs/16-license-reclamation-human-in-the-loop-roadmap.md) — scanner, JSM ticket, human-in-the-loop reclaim after `leaver.completed`
 - [`public-docs/10-aws-scheduled-onboarding-workflow.md`](../../public-docs/10-aws-scheduled-onboarding-workflow.md) — mirror pattern for joiners
 - [`public-docs/07-end-to-end-leaver-demo.md`](../../public-docs/07-end-to-end-leaver-demo.md) — manual `leaver_workflow.py` (CLI, not scheduled)
 - [`lambdas/offboarding_workflow/handler.py`](../../lambdas/offboarding_workflow/handler.py) — Lambda handler
 - [`terraform/aws-offboarding/`](../../terraform/aws-offboarding/) — us-west-1 stack
+- [`scripts/licenses/reclaim.py`](../licenses/reclaim.py) — broker CLI used by the reclaim skill
