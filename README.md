@@ -1,6 +1,6 @@
 # IT Operations Sandbox
 
-An enterprise SaaS platform engineering lab built around a mock 100-person company ("NovaTech Solutions"). Demonstrates identity federation, cross-platform provisioning, RBAC, security policy automation, and drift detection across **Okta, Google Workspace, Slack, Zendesk, and AWS** — all driven by Python against SaaS APIs, plus MCP-integrated AI operations.
+An enterprise SaaS platform engineering lab built around a mock 100-person company ("NovaTech Solutions"). Demonstrates identity federation, cross-platform provisioning, RBAC, security policy automation, and drift detection across **Okta, Google Workspace, Slack, Zendesk, and AWS** — all driven by Python against SaaS APIs, plus MCP-integrated AI operations. The latest piece is a human-in-the-loop license agent: after offboarding, a scanner finds leftover GitHub, Linear, and Jira seats, and a Cursor skill reclaims them only after an operator confirms.
 
 ## Why This Project Exists
 
@@ -22,7 +22,7 @@ Migration rationale and the full Okta-era JML build plan live in [`okta_workato_
 
 ## What's Built
 
-> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | [AWS Scheduled Offboarding Workflow](public-docs/11-aws-scheduled-offboarding-workflow.md) | [GRC JML Audit Access](public-docs/12-grc-jml-audit-access.md) | [Reconcile reports](public-docs/reports/)
+> Detailed write-ups: [Auth0 Identity Platform](public-docs/01-auth0-identity-platform.md) | [AWS SAML Federation](public-docs/02-aws-saml-federation.md) | [GWS Federation & Administration](public-docs/03-gws-federation-and-administration.md) | [Okta Migration](public-docs/04-okta-migration.md) | [Slack SCIM Lifecycle](public-docs/05-slack-scim-lifecycle.md) | [End-to-End Joiner Demo](public-docs/06-end-to-end-joiner-demo.md) | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | [AWS Scheduled Offboarding Workflow](public-docs/11-aws-scheduled-offboarding-workflow.md) | [License Reclamation (human-in-the-loop)](public-docs/16-license-reclamation-human-in-the-loop-roadmap.md) | [GRC JML Audit Access](public-docs/12-grc-jml-audit-access.md) | [Reconcile reports](public-docs/reports/)
 
 ### Okta RBAC Foundation (config-as-code)
 
@@ -107,7 +107,7 @@ The three sides of the JML triangle are all shipped and verified end-to-end agai
 
 - **`scripts/lifecycle/mover_workflow.py`** — handles department transfers: Okta attribute update → group rules re-fire → GWS OU move + Slack DM to new manager + audit post.
 
-- **`scripts/lifecycle/leaver_workflow.py`** — security-critical offboarding: revoke Okta sessions BEFORE deactivating (so existing tokens can't be replayed), then deactivate the Okta user, which triggers SCIM DELETE cascade to Slack within ~3 seconds. GWS suspension gracefully handles the +alias case. Idempotent on re-run. End-to-end demo against the same Sandra Jones from the Joiner: [`public-docs/07-end-to-end-leaver-demo.md`](public-docs/07-end-to-end-leaver-demo.md).
+- **`scripts/lifecycle/leaver_workflow.py`** — security-critical offboarding: revoke Okta sessions BEFORE deactivating (so existing tokens can't be replayed), then deactivate the Okta user, which triggers SCIM DELETE cascade to Slack within ~3 seconds. GWS suspension gracefully handles the +alias case. Idempotent on re-run. End-to-end demo against the same Sandra Jones from the Joiner: [`public-docs/07-end-to-end-leaver-demo.md`](public-docs/07-end-to-end-leaver-demo.md). SCIM covers Slack and GWS; leftover GitHub, Linear, and Jira seats are the license-reclamation flow below. The scheduled path is [`public-docs/11-aws-scheduled-offboarding-workflow.md`](public-docs/11-aws-scheduled-offboarding-workflow.md).
 
 All three write structured JSON logs to gitignored `logs/<workflow>-events.jsonl` for replay/forensics. The Sandra Jones arc — Joiner → activation → Leaver — runs in under 2 minutes of automation time end-to-end, with audit-log evidence on both Okta and Slack sides at every step. The full JML design is specified in [`okta_workato_zendesk_slack.md`](okta_workato_zendesk_slack.md).
 
@@ -120,6 +120,45 @@ Closes the audit-coverage gap on the Joiner side: when a new hire actually click
 - **Secrets in Secrets Manager, not env vars** — five `ohmgym-jml/*` entries in us-west-1; all three Lambdas fetch at cold start; rotation is `terraform/aws-secrets` apply with no Lambda code redeploy
 - **Server-side dedup** — Lambda calls `GET /api/v1/users/{id}` and skips if `lastLogin` is populated, so subsequent password rotations don't misfire as "new hire activated" posts; skip reasons land in CloudWatch as auditable structured log lines
 - **Slack channels created via API** — `scripts/slack/notify.py:ensure_channel` calls `conversations.create` (idempotent: handles `name_taken` + Enterprise Grid `team_id` requirements), so `#joiner-it-ops` and `#leaver-it-ops` are part of the deploy artifact, not a one-off admin step
+
+### Non-SCIM License Reclamation — scan, ticket, human confirm, revoke
+
+Okta deactivation plus SCIM does not remove GitHub org membership, Linear workspace seats, or Jira product access. After every successful scheduled offboarding, the leaver Lambda emits `leaver.completed`. A separate **license scanner** inventories those apps and opens a Jira Service Management **License Reclamation** ticket when a seat is still active or the scan is incomplete. An IT-Ops operator then prompts Cursor; the [reclaim-licenses skill](.cursor/skills/reclaim-licenses/SKILL.md) reads the ticket, dry-runs a plan, and **stops until the operator confirms**. Only then does it call the **reclaim broker**, which is the only component allowed to hold revoke credentials. Live end-to-end proof: [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira, 15 Aug 2026). ([roadmap](public-docs/16-license-reclamation-human-in-the-loop-roadmap.md) · [phase logs](public-docs/License%20Reclaimer/phase-4-human-in-the-loop.md))
+
+```
+Offboarding Lambda (5pm PT)
+  Okta session revoke + deactivate → SCIM (Slack, GWS)
+  EventBridge leaver.completed
+        │
+        ▼
+License Scanner  (read-only secrets)
+  GitHub org member?  Linear human seat?  Jira product access?
+  clean  → DynamoDB + Slack footnote, no ticket
+  active or scan error → JSM License Reclamation + #leaver-it-ops
+        │
+        ▼
+IT-Ops prompts Cursor  (.cursor/skills/reclaim-licenses)
+  read ticket (Atlassian MCP) → dry-run → human confirm → --invoke --apply
+        │
+        ▼
+Reclaim Broker Lambda  (only SaaS write path)
+  allowlist config/licenses/apps.json
+  GitHub remove member · Linear suspend · Jira remove product access
+  comment + Done on the ticket · DynamoDB ohmgym-license-reclaim-logs
+```
+
+- **Scanner and broker are separate Lambdas** in `terraform/aws-license-reclaim/` (`us-west-1`). A failed inventory cannot block Okta deactivation, and the scanner role cannot read write secrets.
+- **Human gate is mandatory.** `auto_reclaim` is `false` for every app. The skill refuses fixture ticket `SUP-2`, a leaver email that does not match the ticket, and any app that is not on the ticket allowlist. It does not transition Done while a requested app is still `error`.
+- **Unknown is not clean.** Auth failures, missing `githubUsername`, and connector errors open a ticket. The broker will not revoke a finding whose scan status is `error` or `identity_unresolved`.
+- **v1 catalog:** GitHub, Linear, and Jira. Figma is parked (`enabled: false`) because the Starter plan has no team-members API.
+- **CLI:** `scripts/licenses/scan_cli.py` and `scripts/licenses/reclaim.py`. The skill uses `--invoke` only, so Cursor never calls GitHub, Linear, or Jira with write tokens.
+
+```bash
+python scripts/licenses/reclaim.py --issue SUP-3 --apps github,jira --invoke
+# operator confirms in chat, then:
+python scripts/licenses/reclaim.py --issue SUP-3 --apps github,jira --invoke --apply \
+  --requested-by "$JIRA_EMAIL"
+```
 
 ### Email Domain Migration
 
@@ -151,7 +190,9 @@ Migrated 100 Auth0 users from one domain to another via the Management API — u
     │ event hook│      │                 │     │ #leaver-it-ops  │
     └───────────┘      └────────┬────────┘     └─────────────────┘
        ▲ Okta event hook → AWS Lambda Function URL → Slack post
-       │ (terraform/aws/ ships 10 resources; first live AWS infra)
+       │ leaver.completed → license scanner → JSM ticket
+       │ human confirm → reclaim broker → GitHub / Linear / Jira
+       │ (terraform/aws-license-reclaim/; broker is the only revoke path)
                                 │
                     ┌───────────▼───────────────────┐
                     │   Python + MCP Automation      │
@@ -204,6 +245,9 @@ User metadata contract (preserved across Auth0 → Okta): `{ department, role_ti
 | `scripts/lifecycle/joiner_workflow.py` | End-to-end Joiner: STAGED + activation email (production-realistic) or pre-set password (fast iteration). Group rules fire → SCIM cascade to GWS+Slack |
 | `scripts/lifecycle/mover_workflow.py` | Department change → Okta attr update → group rules re-fire → GWS OU move + Slack DM/audit |
 | `scripts/lifecycle/leaver_workflow.py` | Offboarding: revoke sessions → Okta deactivate → SCIM DELETE cascade to Slack → GWS suspend (graceful +alias handling). Idempotent. |
+| `scripts/licenses/scan_cli.py` | Dry-run or invoke the license scanner (GitHub / Linear / Jira membership after offboarding) |
+| `scripts/licenses/reclaim.py` | Call the reclaim broker. Default is dry-run; `--invoke --apply` is the live path the Cursor skill uses after human confirm |
+| `.cursor/skills/reclaim-licenses/SKILL.md` | IT-Ops copilot: read the JSM ticket, propose a plan, wait for confirm, reclaim, comment, and transition Done |
 | `scripts/gws/export_config.py` · `reconcile_config.py` | GWS equivalent — same pattern, same flags |
 | `scripts/gws/create_ous.py` · `provision_users.py` · `configure_2sv.py` | Directory API automation + 2SV policy audit |
 | `scripts/lifecycle/sync_auth0_gws.py` | Cross-platform drift detection: Auth0 departments vs. GWS OU placement |
@@ -254,10 +298,17 @@ scripts/
     joiner_workflow.py             #   End-to-end Joiner: STAGED + activation email OR pre-set password
     mover_workflow.py              #   Dept change: Okta attr → group rules → GWS OU + Slack DM
     leaver_workflow.py             #   Offboarding: sessions revoke → Okta deactivate → SCIM cascade
+  licenses/                        # Non-SCIM seat scan + reclaim CLI
+    scan_cli.py                    #   Dry-run or invoke ohmgym-license-scanner
+    reclaim.py                     #   Dry-run or --invoke the reclaim broker (skill uses --invoke only)
+    github_client.py  linear_client.py  jira_client.py
+  offboarding/                     # Scheduled leaver helpers (endDate, invoke, replay)
 config/
   okta/desired-state.json          # Okta RBAC source of truth (groups, rules, attrs, app assignments)
   okta/okta_seed_users.json        # 8 NovaTech seed users across Engineering/Product/IT-Ops/Data
   gws/desired-state.json           # GWS source of truth (OUs, users, groups, policies)
+  licenses/apps.json               # Allowlist: GitHub, Linear, Jira enabled; Figma parked; auto_reclaim false
+.cursor/skills/reclaim-licenses/   # Human-in-the-loop Cursor skill for JSM License Reclamation tickets
 public-docs/
   01-auth0-identity-platform.md
   02-aws-saml-federation.md
@@ -268,12 +319,18 @@ public-docs/
   07-end-to-end-leaver-demo.md     # Live trace of leaver_workflow.py — closes the JML triplet
   08-okta-event-hook-lambda.md     # Okta event hook → AWS Lambda → Slack #joiner-it-ops; first Terraform AWS infra
   10-aws-scheduled-onboarding-workflow.md  # EventBridge Scheduler → Lambda → Okta + Slack; 9am PT daily; us-west-1
+  11-aws-scheduled-offboarding-workflow.md # 5pm PT leaver Lambda; emits leaver.completed
+  16-license-reclamation-human-in-the-loop-roadmap.md  # Scanner + JSM + broker + Cursor skill
+  License Reclaimer/               # Phase 0–4 build logs (trials, JSM, scanner, broker, skill)
   reports/                         # Auto-generated reconcile reports (demoable)
 lambdas/
   okta_activation_handler/         # Code for the Okta event hook receiver (handler.py + build.sh + requirements.txt)
+  license_scanner/                 # Read-only seat inventory after leaver.completed
+  license_reclaim_broker/          # Allowlisted revoke API; only holder of write secrets
 terraform/
   auth0/                           # Auth0 tenant-as-code (planned)
-  aws/                             # AWS infrastructure — 10 resources live (Lambda + URL + IAM + Secrets Manager + log group)
+  aws/                             # AWS infrastructure — activation hook Lambda + URL + IAM + log group
+  aws-license-reclaim/             # Scanner + broker, DynamoDB findings, EventBridge, DLQ, alarms
 ```
 
 ## Documentation
@@ -291,6 +348,8 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | [End-to-End Leaver Demo](public-docs/07-end-to-end-leaver-demo.md) | Live trace of `leaver_workflow.py` against the same Sandra: sessions revoked → Okta deactivate → SCIM DELETE cascade to Slack in 3 seconds. Idempotent re-run validated. Closes the JML triplet. |
 | [Okta Event Hook → AWS Lambda → Slack](public-docs/08-okta-event-hook-lambda.md) | First Terraform-managed AWS infrastructure: Okta event hook posts to a Lambda Function URL, which posts to `#joiner-it-ops` when a new hire actually activates. Marcus Reyes trace, CloudWatch evidence, secrets in Secrets Manager, least-privilege IAM. |
 | [AWS Scheduled Onboarding Workflow](public-docs/10-aws-scheduled-onboarding-workflow.md) | Proactive joiner stack (us-west-1): EventBridge Scheduler → `ohmgym-onboarding-workflow` → Okta activate + DynamoDB + Slack batch. 9am PT daily. Shares `terraform/aws-secrets/`. |
+| [AWS Scheduled Offboarding Workflow](public-docs/11-aws-scheduled-offboarding-workflow.md) | Proactive leaver stack: 5pm PT EventBridge Scheduler → Okta session revoke + deactivate + `#leaver-it-ops`. Emits `leaver.completed`, which starts the license scan. |
+| [License Reclamation](public-docs/16-license-reclamation-human-in-the-loop-roadmap.md) | Non-SCIM seats after offboarding. Scanner Lambda, JSM License Reclamation queue, reclaim broker, and the Cursor skill that waits for a human confirm before any revoke. Phase logs in [License Reclaimer/](public-docs/License%20Reclaimer/phase-4-human-in-the-loop.md). |
 | [Okta JML Build Plan](okta_workato_zendesk_slack.md) | Okta-era Joiner/Mover/Leaver design across GWS + Slack + Zendesk with Python / Workato / Okta Workflows implementations |
 | [Okta RBAC Foundation reports](public-docs/reports/) | Auto-generated reconcile reports showing zero-drift state + remediation history |
 
@@ -298,15 +357,15 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 
 ### Progress at a glance
 
-**4 complete · 2 partial · 2 planned** — identity layer + provisioning + downstream SCIM + full JML triplet (Joiner/Mover/Leaver) all proven on real test users. Slack SAML is the one remaining blocker on Phase 5; SCIM works around it.
+Identity, SCIM JML, scheduled AWS onboarding/offboarding, and non-SCIM license reclamation (human-in-the-loop) are live on real test users. Slack SAML is still parked; Zendesk and selective auto-reclaim are not built.
 
 ### Most recent milestone
 
-**Cross-platform audit trail wired up via Okta Event Hook → AWS Lambda → Slack, with server-side dedup against routine password changes.** Closes the audit-coverage gap on the Joiner side: when a new hire actually clicks the activation link and sets their password, an Okta event hook fires a Lambda Function URL, which posts to `#joiner-it-ops`. The Lambda dedupes via Okta Management API lookup of `lastLogin` (Private Key JWT auth, same API Services app as the rest of the repo) so a routine password rotation 6 months later doesn't generate a misleading "new hire activated" post. First Terraform-managed AWS infrastructure in the repo — `terraform/aws/` ships 13 resources via standard `init / plan / apply` (Lambda, Function URL, execution role, scoped IAM policy on 5 secret ARNs, 5 Secrets Manager entries, CloudWatch log group). Live trace + dedup verification against Marcus Reyes and Priya Patel in [`public-docs/08`](public-docs/08-okta-event-hook-lambda.md).
+**AI copilot reclaims non-SCIM SaaS seats during offboarding, with a human in the loop.** Scheduled offboarding still deactivates the Okta user and lets SCIM remove Slack and Google Workspace. A license scanner then checks GitHub, Linear, and Jira. Leftover or unverified seats become a Jira Service Management License Reclamation ticket. The Cursor skill (`.cursor/skills/reclaim-licenses/SKILL.md`) reads that ticket through Atlassian MCP, shows a dry-run, and does not revoke anything until the operator confirms in chat. The reclaim broker Lambda is the only writer to those admin APIs. Proven live on [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3): Erin Patel’s GitHub org membership and Jira Software product access were removed, the ticket was commented and set to Done, and `ohmgym-license-reclaim-logs` recorded `status=reclaimed`. Write-up: [`public-docs/16`](public-docs/16-license-reclamation-human-in-the-loop-roadmap.md) and [phase 4](public-docs/License%20Reclaimer/phase-4-human-in-the-loop.md).
 
 ### Next up
 
-**Phase 6 — Zendesk Integration**, or finish Phase 5 by getting Slack SAML over the line. The JML triplet is functionally complete and now has cross-platform audit-trail coverage; Zendesk would extend it with audit-trail-as-tickets (per ADR-004) and agent-seat provisioning. Slack SAML diagnosis remains parked behind HAR capture or Slack Support.
+**License-reclaim Phase 5 — dashboard and selective auto-reclaim**, or **Zendesk** (original Phase 6). GRC can already read `ohmgym-license-reclaim-logs`. Still open: a dashboard card for open tickets and seats recovered, and an opt-in `auto_reclaim: true` path for a low-risk app. Fully unattended revoke stays out of scope until that flag exists. Slack SAML remains parked behind HAR capture or Slack Support.
 
 ### Full phase tracker
 
@@ -316,10 +375,11 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 | 2 | Google Workspace Architecture | OU hierarchy, per-OU 2SV + app governance, `reconcile_config.py` | ✅ Complete |
 | 3 | Okta RBAC Foundation | Profile schema, dept groups, group rules, config-as-code pipeline | ✅ Complete |
 | 4 | Okta User Provisioning + Federation | 8 seed users · Okta → GWS SAML (`*Override` pattern) · Okta → AWS deferred | ✅ Complete (AWS deferred) |
-| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, full JML triplet, **cross-platform Slack audit trail (Okta event hook → AWS Lambda)**, SAML still broken | 🚧 **Partial (current)** — SCIM + JML + audit hook ✅, SAML ❌ |
-| 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned (next up) |
+| 5 | Slack Platform Engineering | SCIM provisioning, audit-log observability, full JML triplet, **cross-platform Slack audit trail (Okta event hook → AWS Lambda)**, SAML still broken | 🚧 Partial — SCIM + JML + audit hook ✅, SAML ❌ |
+| 6 | Zendesk Integration | Ticket forms, API token, MCP server, JML audit-trail tickets | ⏳ Planned |
 | 7 | Cross-Platform Identity | `sync_okta_all.py` drift detection across all JML targets; S3 + DynamoDB remote Terraform state | ⏳ Planned |
-| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs (incl. `terraform plan` gates), Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; **first Terraform infra live** (`terraform/aws/`); MCP connected |
+| 8 | Config-as-Code & AI Ops | CI/CD for tenant configs (incl. `terraform plan` gates), Claude MCP workflows, escalation runbooks | 🚧 Partial — Okta + Auth0 + Slack APIs scripted; Terraform JML stacks live; **license-reclaim skill is the first human-gated MCP workflow** |
+| 9 | Non-SCIM license reclamation | Scanner after `leaver.completed`, JSM queue, broker-only revoke, Cursor skill with human confirm | ✅ Phases 0–4 live (15 Aug 2026). Dashboard card and `auto_reclaim` still open |
 
 ### How the phases map to the Enterprise SaaS Engineer JD
 
@@ -328,6 +388,7 @@ Detailed write-ups covering architecture, troubleshooting, and technical decisio
 - **Phases 5–6** prove the JML story on the two platforms the role names most often (Slack, Zendesk).
 - **Phase 7** is the drift-detection / compliance story: one sync engine comparing desired state across all four SaaS tenants.
 - **Phase 8** wraps the project in the "platform config as code with AI ops" framing: CI gates, MCP-driven operations, runbooks.
+- **Phase 9** is the offboarding gap SCIM cannot close: discover leftover SaaS seats in code, queue the work in JSM, and let an AI copilot reclaim them only after a person confirms. The broker, not the agent, holds the revoke keys.
 
 ## Identity Protocol Reference
 

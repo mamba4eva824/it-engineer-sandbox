@@ -8,6 +8,10 @@ Companion to:
 - [04-okta-migration.md](04-okta-migration.md) — Okta → GWS federation
 - [05-slack-scim-lifecycle.md](05-slack-scim-lifecycle.md) — Okta → Slack SCIM lifecycle (provision/deprovision/reactivate)
 - [06-end-to-end-joiner-demo.md](06-end-to-end-joiner-demo.md) — Joiner orchestration with activation-email flow
+- [11-aws-scheduled-offboarding-workflow.md](11-aws-scheduled-offboarding-workflow.md) — the same deactivate path on a 5pm PT schedule; emits `leaver.completed`
+- [16-license-reclamation-human-in-the-loop-roadmap.md](16-license-reclamation-human-in-the-loop-roadmap.md) — what happens to **non-SCIM** seats (GitHub, Linear, Jira) after that event: scan, JSM ticket, human confirm, broker revoke
+
+This CLI covers the SCIM half of offboarding (Okta, Slack, GWS). It does not inventory or revoke GitHub, Linear, or Jira. That work starts from the scheduled Lambda's `leaver.completed` event, not from this script.
 
 ## Purpose
 

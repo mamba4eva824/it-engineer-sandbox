@@ -7,6 +7,7 @@ Mirror of [10-aws-scheduled-onboarding-workflow.md](10-aws-scheduled-onboarding-
 Companion to:
 - [07-end-to-end-leaver-demo.md](07-end-to-end-leaver-demo.md) — manual `leaver_workflow.py`
 - [05-slack-scim-lifecycle.md](05-slack-scim-lifecycle.md) — SCIM deprovision evidence
+- [16-license-reclamation-human-in-the-loop-roadmap.md](16-license-reclamation-human-in-the-loop-roadmap.md) — non-SCIM seats after this Lambda emits `leaver.completed`
 
 This adds **a third Terraform-managed AWS stack** in `terraform/aws-offboarding/`, deployed in **us-west-1** alongside `terraform/aws-secrets/` (shared `ohmgym-jml/*` credentials), `terraform/aws-onboarding/` (proactive joiner), and `ohmgym-activation-workflow` (reactive joiner).
 
@@ -70,12 +71,22 @@ The realistic pattern is HR sets `profile.endDate` weeks in advance (notice peri
 │    metric: AWS/Lambda Errors, period 5m, threshold ≥ 1                           │
 │    action: SNS topic → email (failure only; success posts to Slack)              │
 │                                                                                  │
-│  ─── downstream (no code in this Lambda) ───                                   │
+│  ─── downstream ───                                                              │
 │  Okta SCIM → Slack user_deactivated within ~3s of Okta deactivation.            │
 │  GWS SCIM cascade for real (non-alias) SCIM users.                               │
+│  PutEvents leaver.completed → license scanner (separate Lambda; doc 16).        │
+│  Scanner failure does not roll back the Okta deactivate.                         │
 │                                                                                  │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Downstream: non-SCIM license reclamation
+
+SCIM removes Slack and Google Workspace. GitHub, Linear, and Jira are not on that connector, so a successful deactivate in this Lambda also emits `leaver.completed` (`source=ohmgym.offboarding`) with the leaver email, Okta id, run id, and run date. EventBridge delivers that event to `ohmgym-license-scanner`.
+
+The scanner is read-only. It writes findings to `ohmgym-license-reclaim-logs` and opens a JSM **License Reclamation** ticket when any enabled app is still `active` or the scan is `error` / `identity_unresolved`. A clean scan does not open a ticket. IT-Ops then uses the Cursor skill `.cursor/skills/reclaim-licenses/SKILL.md`: dry-run, human confirm, then `scripts/licenses/reclaim.py --invoke --apply`. The reclaim broker is the only component that holds revoke credentials.
+
+PutEvents failure is logged and does not undo the Okta deactivate. Full contract, allowlist, and the SUP-3 live reclaim: [16-license-reclamation-human-in-the-loop-roadmap.md](16-license-reclamation-human-in-the-loop-roadmap.md).
 
 ## Terraform stack layout
 

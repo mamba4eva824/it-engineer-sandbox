@@ -4,7 +4,7 @@ Product roadmap for reclaiming SaaS seats after offboarding when apps are **not 
 
 **Architecture variant:** Deterministic scan + ticket + human-gated reclaim. Optional LLM orchestration for decision support; **broker Lambda is the only write path** to SaaS admin APIs. The agent never holds raw revoke credentials.
 
-**Status (15 Aug 2026):** Phase 0–3 are live in `us-west-1`. Phase 4 (Cursor skill + human-in-the-loop reclaim) is in progress this session — skill shipped; live test is [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira). Figma is parked; Linear replaced it as the third v1 connector. See:
+**Status (15 Aug 2026):** Phases 0–4 are live in `us-west-1`. The Cursor skill completed a human-in-the-loop reclaim on [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (Erin Patel, GitHub + Jira): dry-run, operator confirm, broker `--invoke --apply`, ticket Done, DynamoDB `status=reclaimed`. Figma stays parked; Linear is the third v1 connector. Phase 5 (dashboard card and opt-in `auto_reclaim`) is still open. See:
 
 - [License Reclaimer/phase-0-trials-and-credentials.md](License%20Reclaimer/phase-0-trials-and-credentials.md)
 - [License Reclaimer/phase-1-jsm-foundation.md](License%20Reclaimer/phase-1-jsm-foundation.md)
@@ -461,7 +461,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 
 ### Phase 2 — Deterministic License Scanner Lambda
 
-**Status:** Live (14 Aug 2026). Log: [phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md). Scanner Terraform applied in `882248517627` / `us-west-1`; read secrets promoted; Okta `githubUsername` on the tenant; offboarding emit patched in-place. P2-R10 dashboard deferred. First live JSM create armed for 17:00 PT 14 Aug, not yet observed.
+**Status:** Live (14 Aug 2026). Log: [phase-2-license-scanner.md](License%20Reclaimer/phase-2-license-scanner.md). Scanner Terraform applied in `882248517627` / `us-west-1`; read secrets promoted; Okta `githubUsername` on the tenant; offboarding emit patched in-place. P2-R10 dashboard deferred. The 14 Aug 17:00 PT batch opened JSM tickets; [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) is the one reclaimed in Phase 4.
 
 **Objective:** After offboarding success, scan GitHub / Linear / Jira (read-only). Ticket + Slack + DynamoDB when seats remain **or** a scan is incomplete.
 
@@ -487,7 +487,7 @@ config/licenses/apps.json        # stub allowlist (Linear in, Figma parked)
 **Exit criteria:**
 
 - [x] Scanner stack live: EventBridge `leaver.completed` → Lambda + DLQ + DDB + read secrets (14 Aug apply)
-- [ ] Deactivate test leavers → scanner runs → ticket lists exact apps with active seats *(armed for 17:00 PT 14 Aug; five Okta `endDate`s set; live JSM create not yet observed)*
+- [x] Deactivate test leavers → scanner runs → ticket lists exact apps with active seats *(14 Aug 17:00 PT batch; SUP-3 listed GitHub + Jira for Erin Patel)*
 - [x] Clean user (no seats, no errors) → `status=clean`, no ticket *(unit)*
 - [x] GitHub **404** → `not_member`; GitHub **401** → `misconfig` (not `not_member`)
 - [x] Jira called at site URL → `misconfig` 401; gateway empty search → `not_member`
@@ -510,7 +510,7 @@ terraform/aws-license-reclaim/
 
 ### Phase 3 — Reclaim Broker (deterministic writes)
 
-**Status:** Applied and live in `us-west-1` (14 Aug 2026). Write secrets not yet promoted; no live reclaim run yet. Log: [phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md).
+**Status:** Applied and live in `us-west-1` (14 Aug 2026). Write secrets promoted and a live reclaim completed 15 Aug 2026 on [SUP-3](https://buffett-dev.atlassian.net/browse/SUP-3) (GitHub + Jira). Log: [phase-3-reclaim-broker.md](License%20Reclaimer/phase-3-reclaim-broker.md). Operator path is the Phase 4 skill (`--invoke` only).
 
 **Objective:** Allowlisted revoke API. Dry-run default. No Cursor required yet — `curl` / CLI proves the path.
 
@@ -528,7 +528,7 @@ terraform/aws-license-reclaim/
 **Exit criteria:**
 
 - [ ] Dry-run shows accurate plan
-- [ ] Live reclaim removes GitHub membership for test user; ticket commentable via CLI
+- [x] Live reclaim removes GitHub membership for test user; ticket commentable via CLI *(SUP-3, 15 Aug 2026, via broker `--invoke --apply`)*
 - [ ] Unknown app key → 400, no SaaS call
 - [ ] Broker refuses revoke when scan finding for that app is `error` / `identity_unresolved`
 

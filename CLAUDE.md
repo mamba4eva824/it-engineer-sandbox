@@ -12,9 +12,10 @@ A 100-person SaaS startup with departments: Engineering, IT-Ops, Finance, Execut
 - **Identity Provider**: Auth0 Developer Tenant (`your-tenant.us.auth0.com`) — SAML/OIDC, RBAC, Actions, Log Streams
 - **Collaboration**: Google Cloud Identity Free (`your-domain.com`) — OUs, Directory API, Admin SDK, data governance
 - **Communication**: Slack Developer Sandbox — Admin API, SCIM, channel governance, app management
-- **Cloud**: AWS Free Tier (IAM Identity Center, Lambda, DynamoDB) — deemphasized; "cloud infrastructure lives with separate teams"
-- **Config-as-Code**: Python scripts for GWS/Slack, Terraform for Auth0/AWS, GitHub Actions CI/CD
-- **MCP Servers**: Okta (Private Key JWT), Auth0, Filesystem (future: GWS, Slack)
+- **Cloud**: AWS us-west-1 — scheduled JML Lambdas, license scanner + reclaim broker, DynamoDB audit tables, Secrets Manager. IAM Identity Center federation is deferred.
+- **License reclamation**: After offboarding, `ohmgym-license-scanner` inventories GitHub, Linear, and Jira. A JSM License Reclamation ticket is the work queue. `.cursor/skills/reclaim-licenses` dry-runs, waits for a human confirm, then calls `ohmgym-license-reclaim-broker` — the only SaaS write path. Allowlist: `config/licenses/apps.json` (`auto_reclaim` is false).
+- **Config-as-Code**: Python scripts for GWS/Slack/Okta/licenses, Terraform for AWS, GitHub Actions CI/CD
+- **MCP Servers**: Okta (Private Key JWT), Auth0, Atlassian/Jira (license-reclaim skill), Filesystem
 
 ## Directory Structure
 ```
@@ -28,15 +29,24 @@ scripts/
   gws/             # Google Workspace Admin SDK scripts (Python)
   slack/            # Slack Admin API scripts (Python)
   lifecycle/       # Cross-platform Joiner/Mover/Leaver automation
+  licenses/        # Non-SCIM scan + reclaim CLI (broker --invoke is the skill path)
+  offboarding/     # Scheduled leaver helpers (endDate, invoke, replay)
 config/
   okta/            # Okta tenant config-as-code (profile schema, groups, rules)
   auth0/           # Auth0 tenant config-as-code
   gws/             # Google Workspace config-as-code
   slack/            # Slack workspace config-as-code
   aws/             # AWS config-as-code
+  licenses/        # App allowlist (apps.json); auto_reclaim false in v1
 terraform/
   auth0/           # Auth0 Terraform provider
-  aws/             # AWS infrastructure
+  aws/             # Activation-hook Lambda and shared JML pieces
+  aws-license-reclaim/  # Scanner + broker, findings table, EventBridge, DLQ
+lambdas/
+  license_scanner/          # Read-only inventory on leaver.completed
+  license_reclaim_broker/   # Allowlisted revoke; only holder of write secrets
+.cursor/skills/reclaim-licenses/  # Human-in-the-loop JSM reclaim skill
+public-docs/       # Architecture write-ups; doc 16 is the license-reclaim roadmap
 docs/              # Architecture diagrams, runbooks, resume, reports
 logs/              # Auto-generated activity logs (gitignored)
 ```
@@ -87,9 +97,19 @@ Christopher's resume is at `docs/Senior IT Engineer Resume .md`. When generating
 | Partner with Security on SaaS hardening | Cross-platform security posture reports, access reviews | Quarterly access reviews, SOC 2 Type II readiness (Headspace) |
 | Final escalation tier | Vendor escalation runbooks with diagnostic scripts | IT Operations lead, cross-functional partner (Headspace) |
 | Catch drift | Cross-platform drift detection comparing desired vs. actual state | Least-privilege IAM across 48 resources (Buffett AI) |
+| AI-assisted offboarding for non-SCIM SaaS | License scanner → JSM ticket → Cursor skill with human confirm → reclaim broker | Zero-touch JML workflows and quarterly access reviews (Headspace); Python against SaaS APIs |
 
 ### Interview Framing Rule
 Every output from agents and skills should be expressible as: "I hit the ceiling of what the admin console could do and solved it in code. In my sandbox, I built [X], which mirrors [JD requirement] and my experience at [Headspace/Buffett AI] where I [specific achievement]."
 
 ## Phase Tracking
-See `it_ops_lab.md` for the full 10-week roadmap. See `okta_workato_zendesk_slack.md` for the Okta-era JML build plan. Current focus: Okta RBAC foundation (profile schema + department groups + group rules via `scripts/okta/reconcile_config.py`), with GWS done, Slack pending, Auth0 preserved on `auth0_sandbox` branch as snapshot.
+See `it_ops_lab.md` for the original 10-week roadmap and `okta_workato_zendesk_slack.md` for the Okta-era JML plan. Okta RBAC, GWS, Slack SCIM, and scheduled onboarding/offboarding are already shipped. Auth0 remains on the `auth0_sandbox` branch as a snapshot.
+
+**Current focus:** non-SCIM license reclamation with a human in the loop. Phases 0–4 are live (`public-docs/16-license-reclamation-human-in-the-loop-roadmap.md`):
+
+1. Offboarding Lambda deactivates Okta and emits `leaver.completed` (SCIM still covers Slack and GWS).
+2. `ohmgym-license-scanner` reads GitHub, Linear, and Jira. Active seats or incomplete scans open a JSM License Reclamation ticket.
+3. `.cursor/skills/reclaim-licenses/SKILL.md` reads the ticket, dry-runs `scripts/licenses/reclaim.py --invoke`, and waits for an explicit confirm.
+4. `--invoke --apply` calls the broker. The skill never holds GitHub, Linear, or Jira write tokens and never writes DynamoDB.
+
+Live proof is SUP-3 (Erin Patel, GitHub + Jira, 15 Aug 2026). Still open on that roadmap: dashboard card and opt-in `auto_reclaim`. Figma stays disabled.
